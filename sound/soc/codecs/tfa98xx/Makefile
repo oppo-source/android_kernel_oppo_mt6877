@@ -17,19 +17,20 @@
 subdir-ccflags-y += -I$(srctree)/sound/soc/mediatek/common
 
 # debugging support (also enables trace_printk)
-ccflags-y += -Isound/soc/codecs/tfa98xx/inc
+ccflags-y += -Isound/soc/codecs/tfa98xx
 ccflags-y += -DDEBUG -DTFA_NON_DSP_SOLUTION
 ccflags-y += -Werror
+ccflags-y += -DVENDOR_EDIT -DOPLUS_ARCH_EXTENDS
 ccflags-y += $(call cc-option,-Wno-date-time,)
 
-snd-soc-tfa98xx-objs += src/tfa98xx.o
-snd-soc-tfa98xx-objs += src/tfa_container.o
-snd-soc-tfa98xx-objs += src/tfa_dsp.o
-snd-soc-tfa98xx-objs += src/tfa_init.o
+snd-soc-tfa98xx-objs += tfa98xx.o
+snd-soc-tfa98xx-objs += tfa_container.o
+snd-soc-tfa98xx-objs += tfa_dsp.o
+snd-soc-tfa98xx-objs += tfa_init.o
 
 ifdef TFA_DEBUG
 ccflags-y += -DTFA_DEBUG -DDEBUG
-snd-soc-tfa98xx-objs += src/tfa_debug.o
+snd-soc-tfa98xx-objs += tfa_debug.o
 endif
 
 obj-y += snd-soc-tfa98xx.o

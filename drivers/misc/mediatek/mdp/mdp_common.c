@@ -762,11 +762,10 @@ static s32 cmdq_mdp_check_engine_waiting_unlock(struct cmdqRecStruct *handle)
 		if (mdp_ctx.thread[i].task_count &&
 			handle->secData.is_secure != mdp_ctx.thread[i].secure) {
 			CMDQ_LOG(
-				"sec engine busy %u count:%u engine:%#llx & %#llx submit:%llu trigger:%llu\n",
+				"sec engine busy %u count:%u engine:%#llx & %#llx\n",
 				i, mdp_ctx.thread[i].task_count,
 				mdp_ctx.thread[i].engine_flag,
-				handle->engineFlag,
-				handle->submit, handle->trigger);
+				handle->engineFlag);
 			return -EBUSY;
 		}
 	}
@@ -930,6 +929,8 @@ static s32 cmdq_mdp_consume_handle(void)
 	u32 index;
 	bool acquired = false;
 	struct CmdqCBkStruct *callback = cmdq_core_get_group_cb();
+	bool force_inorder = false;
+	bool secure_run = false;
 	bool conflict = false;
 
 	/* operation for tasks_wait list need task mutex */
@@ -940,20 +941,47 @@ static s32 cmdq_mdp_consume_handle(void)
 	CMDQ_PROF_MMP(mdp_mmp_get_event()->consume_done, MMPROFILE_FLAG_START,
 		current->pid, 0);
 
+	handle = list_first_entry_or_null(&mdp_ctx.tasks_wait, typeof(*handle),
+		list_entry);
+	if (handle)
+		secure_run = handle->secData.is_secure;
+
 	/* loop waiting list for pending handles */
 	list_for_each_entry_safe(handle, temp, &mdp_ctx.tasks_wait,
 		list_entry) {
 		/* operations for thread list need thread lock */
 		mutex_lock(&mdp_thread_mutex);
 
+		if (force_inorder && handle->force_inorder) {
+			mutex_unlock(&mdp_thread_mutex);
+			CMDQ_LOG(
+				"skip force inorder handle:0x%p engine:0x%llx\n",
+				handle, handle->engineFlag);
+			continue;
+		}
+
+		if (secure_run != handle->secData.is_secure) {
+			mutex_unlock(&mdp_thread_mutex);
+			CMDQ_LOG(
+				"skip secure inorder handle:%p engine:%#llx sec:%s\n",
+				handle, handle->engineFlag,
+				handle->secData.is_secure ? "true" : "false");
+			break;
+		}
+
 		handle->thread = cmdq_mdp_find_free_thread(handle);
 		if (handle->thread == CMDQ_INVALID_THREAD) {
+			/* no available thread, keep wait */
+			if (handle->force_inorder) {
+				CMDQ_LOG(
+					"begin force inorder handle:0x%p engine:0x%llx\n",
+					handle, handle->engineFlag);
+				force_inorder = true;
+			}
 			mutex_unlock(&mdp_thread_mutex);
 			CMDQ_MSG(
-				"fail to get thread handle:0x%p engine:0x%llx sec:%s other acquired:%s\n",
-				handle, handle->engineFlag,
-				handle->secData.is_secure ? "true" : "false",
-				acquired ? "true" : "false");
+				"fail to get thread handle:0x%p engine:0x%llx\n",
+				handle, handle->engineFlag);
 			conflict = true;
 			break;
 		}
@@ -992,8 +1020,8 @@ static s32 cmdq_mdp_consume_handle(void)
 		err = cmdq_pkt_flush_async_ex(handle, 0, 0, false);
 		if (err < 0) {
 			/* change state so waiting thread may release it */
-			CMDQ_ERR("fail to flush handle:0x%p thread:%d\n",
-				handle, handle->thread);
+			CMDQ_ERR("fail to flush handle:0x%p\n",
+				handle);
 			continue;
 		}
 
@@ -1264,7 +1292,8 @@ s32 cmdq_mdp_handle_sec_setup(struct cmdqSecDataStruct *secData,
 
 	CMDQ_MSG("%s start:%d, %d\n", __func__,
 		secData->is_secure, secData->addrMetadataCount);
-	if (!secData->addrMetadataCount) {
+	if ((!secData->addrMetadataCount) ||
+		(secData->addrMetadataCount > MDP_MAX_METADATA_COUNT_SIZE)) {
 		CMDQ_ERR(
 			"[secData]mismatch is_secure %d and addrMetadataCount %d\n",
 			secData->is_secure,
@@ -1335,8 +1364,11 @@ s32 cmdq_mdp_handle_sec_setup(struct cmdqSecDataStruct *secData,
 		cmdq_sec_pkt_set_mtee(handle->pkt, true);
 	else
 		cmdq_sec_pkt_set_mtee(handle->pkt, false);
-	CMDQ_LOG("handle:%p mtee:%d\n", handle,
-		((struct cmdq_sec_data *)handle->pkt->sec_data)->mtee);
+	CMDQ_LOG("handle:%p mtee:%d dapc:%#llx(%#llx) port:%#llx(%#llx)\n",
+		handle,
+		((struct cmdq_sec_data *)handle->pkt->sec_data)->mtee,
+		handle->secData.enginesNeedDAPC, dapc,
+		handle->secData.enginesNeedPortSecurity, port);
 #endif
 
 	kfree(addr_meta);
@@ -1447,6 +1479,7 @@ s32 cmdq_mdp_handle_flush(struct cmdqRecStruct *handle)
 #ifdef CMDQ_SECURE_PATH_SUPPORT
 	if (handle->secData.is_secure) {
 		/* insert backup cookie cmd */
+		cmdq_sec_insert_backup_cookie(handle->pkt);
 		handle->thread = CMDQ_INVALID_THREAD;
 
 		/* Passing readback required data */
@@ -1472,6 +1505,14 @@ s32 cmdq_mdp_handle_flush(struct cmdqRecStruct *handle)
 void cmdq_mdp_op_readback(struct cmdqRecStruct *handle, u16 engine,
 	dma_addr_t addr, u32 param)
 {
+	if (handle->readback_cnt >= CMDQ_MAX_READBACK_ENG) {
+		CMDQ_ERR("%s readback count %d exceed max readback engine\n",
+			__func__, handle->readback_cnt);
+		cmdq_dump_pkt(handle->pkt, 0, false);
+		CMDQ_AEE("MDP", "read back overflow %hu addr %lu param %u\n",
+			engine, addr, param);
+		return;
+	}
 	mdp_funcs.mdpComposeReadback(handle, engine, addr, param);
 }
 
@@ -2455,6 +2496,10 @@ static void cmdq_mdp_begin_task_virtual(struct cmdqRecStruct *handle,
 
 	pmqos_curr_record =
 		kzalloc(sizeof(struct mdp_pmqos_record), GFP_KERNEL);
+	if (unlikely(!pmqos_curr_record)) {
+		CMDQ_ERR("alloc pmqos_curr_record fail\n");
+		return;
+	}
 	handle->user_private = pmqos_curr_record;
 
 	do_gettimeofday(&curr_time);
@@ -2745,6 +2790,10 @@ static void cmdq_mdp_end_task_virtual(struct cmdqRecStruct *handle,
 	do_gettimeofday(&curr_time);
 	mdp_curr_pmqos = (struct mdp_pmqos *)handle->prop_addr;
 	pmqos_curr_record = (struct mdp_pmqos_record *)handle->user_private;
+	if (unlikely(!pmqos_curr_record)) {
+		CMDQ_ERR("alloc pmqos_curr_record fail\n");
+		return;
+	}
 	pmqos_curr_record->submit_tm = curr_time;
 
 	expired = curr_time.tv_sec > mdp_curr_pmqos->tv_sec ||
@@ -3668,6 +3717,7 @@ const char *cmdq_mdp_get_rsz_state(const u32 state)
 void cmdq_mdp_dump_rot(const unsigned long base, const char *label)
 {
 	u32 value[50] = { 0 };
+	u8 i;
 
 	value[0] = CMDQ_REG_GET32(base + 0x000);
 	value[1] = CMDQ_REG_GET32(base + 0x008);
@@ -3807,6 +3857,19 @@ void cmdq_mdp_dump_rot(const unsigned long base, const char *label)
 	CMDQ_ERR(
 		"VIDO_PVRIC: 0x%08x, VIDO_PENDING_ZERO: 0x%08x, VIDO_FRAME_SIZE: 0x%08x\n",
 		value[47], value[48], value[49]);
+
+	for (i = 0; i < 4; i++) {
+		CMDQ_REG_SET32(base + 0x018, 0x00000300);
+		value[12] = CMDQ_REG_GET32(base + 0x0D0);
+		CMDQ_REG_SET32(base + 0x018, 0x00001900);
+		value[34] = CMDQ_REG_GET32(base + 0x0D0);
+		CMDQ_ERR(
+			"REPEAT %u ROT_DEBUG_3 %#010x line %#06x pixel %#05x ROT_DEBUG_19 %#010x smi req:%u ack:%u\n",
+			i, value[12],
+			value[12] >> 16, (value[12] >> 4) & 0xFFF,
+			value[34],
+			(value[34] >> 30) & 0x1, (value[34] >> 29) & 0x1);
+	}
 }
 
 void cmdq_mdp_dump_color(const unsigned long base, const char *label)

@@ -116,7 +116,6 @@ int mtk_session_set_mode(struct drm_device *dev, unsigned int session_mode)
 	int i;
 	struct mtk_drm_private *private = dev->dev_private;
 	const struct mtk_session_mode_tb *mode_tb = private->data->mode_tb;
-	unsigned int session_id;
 
 	mutex_lock(&private->commit.lock);
 	if (session_mode >= MTK_DRM_SESSION_NUM) {
@@ -160,14 +159,11 @@ int mtk_session_set_mode(struct drm_device *dev, unsigned int session_mode)
 		mtk_set_layering_opt(LYE_OPT_RPO, 1);
 
 		/* OVL0_2l switch back to main path */
-		DDPMSG("Switch vds: crtc2 vds set ddp mode to DL\n");
-		mtk_need_vds_path_switch(private->crtc[0]);
+		if (private->need_vds_path_switch_back) {
+			DDPMSG("Switch vds: crtc2 vds set ddp mode to DL\n");
+			mtk_need_vds_path_switch(private->crtc[0]);
+		}
 	}
-
-	/* has memory session. need disconnect wdma from cwb*/
-	session_id = mtk_get_session_id(private->crtc[2]);
-	if (session_id != -1)
-		mtk_crtc_cwb_path_disconnect(private->crtc[0]);
 
 	/* For releasing HW resource purpose, the ddp mode should
 	 * switching reversely in some situation.
@@ -190,12 +186,11 @@ int mtk_session_set_mode(struct drm_device *dev, unsigned int session_mode)
 					private->crtc[i],
 					mode_tb[session_mode].ddp_mode[i], 1);
 		}
-	}
-
-	/* has no memory session. need disconnect wdma from cwb*/
-	if (session_id == -1) {
-		private->need_cwb_path_disconnect = false;
-		private->cwb_is_preempted = false;
+#if defined(CONFIG_MTK_TEE_GP_SUPPORT) && defined(CONFIG_MACH_MT6877)
+		/* For wfd secure region */
+		DDPINFO("Switch WFD: display call m4u_sec_init\n");
+		m4u_sec_init();
+#endif
 	}
 
 	private->session_mode = session_mode;

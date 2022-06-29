@@ -767,18 +767,16 @@ s32 smi_debug_bus_hang_detect(const bool gce, const char *user)
 
 	for (i = 0; i < SMI_LARB_NUM && !ret; i++)
 		ret = (busy[i] == time ? i : ret);
-	if (!ret || busy[SMI_LARB_NUM] < time) {
-		SMIWRN(gce, "SMI MM bus NOT hang, check master %s\n", user);
-		smi_debug_dump_status(gce);
-		return 0;
-	}
 
-	SMIWRN(gce, "SMI MM bus may hang by %s/M4U/EMI/DVFS\n", user);
+	if (!ret || busy[SMI_LARB_NUM] < time)
+		SMIWRN(gce, "SMI MM bus NOT hang, check master %s\n", user);
+	else
+		SMIWRN(gce, "SMI MM bus may hang by %s/M4U/EMI/DVFS\n", user);
 	for (i = 0; i <= SMI_DEV_NUM; i++)
 		if (!i || i == SMI_LARB_NUM || i == SMI_DEV_NUM)
 			smi_debug_dumper(gce, true, i);
 
-	for (i = 1; i < time; i++)
+	for (i = 0; i < time; i++)
 		for (j = 0; j <= SMI_DEV_NUM; j++)
 			smi_debug_dumper(gce, false, j);
 	smi_debug_dump_status(gce);
@@ -820,6 +818,12 @@ static inline void smi_larb_port_set(const struct mtk_smi_dev *smi)
 		i < smi_larb_cmd_gp_en_port[smi->id][1]; i++)
 		writel(readl(smi->base + SMI_LARB_NON_SEC_CON(i)) | 0x2,
 			smi->base + SMI_LARB_NON_SEC_CON(i));
+#if IS_ENABLED(CONFIG_MACH_MT6877)
+	/* Set grouping for larb 1 port 6 because larb 1 port 1 set previously */
+	if (smi->id == 1)
+		writel(readl(smi->base + SMI_LARB_NON_SEC_CON(6)) | 0x2,
+			smi->base + SMI_LARB_NON_SEC_CON(6));
+#endif
 
 	for (i = smi_larb_bw_thrt_en_port[smi->id][0];
 		i < smi_larb_bw_thrt_en_port[smi->id][1]; i++)

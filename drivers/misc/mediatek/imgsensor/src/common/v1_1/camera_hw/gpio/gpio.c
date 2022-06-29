@@ -12,6 +12,7 @@
  */
 
 #include "gpio.h"
+#include <soc/oplus/system/oppo_project.h>
 
 struct GPIO_PINCTRL gpio_pinctrl_list_cam[
 			GPIO_CTRL_STATE_MAX_NUM_CAM] = {
@@ -22,10 +23,14 @@ struct GPIO_PINCTRL gpio_pinctrl_list_cam[
 	{"rst0"},
 	{"ldo_vcama_1"},
 	{"ldo_vcama_0"},
+	{"ldo_vcamaf_1"},
+	{"ldo_vcamaf_0"},
 	{"ldo_vcamd_1"},
 	{"ldo_vcamd_0"},
 	{"ldo_vcamio_1"},
 	{"ldo_vcamio_0"},
+	{"ldo_vcama1_1"},
+	{"ldo_vcama1_0"}
 };
 
 #ifdef MIPI_SWITCH
@@ -123,15 +128,15 @@ static enum IMGSENSOR_RETURN gpio_set(
 	struct GPIO           *pgpio = (struct GPIO *)pinstance;
 	enum   GPIO_STATE      gpio_state;
 
-	/* PK_DBG("%s :debug pinctrl ENABLE, PinIdx %d, Val %d\n",
-	 *	__func__, pin, pin_state);
-	 */
+	 PK_DBG("%s : debug pinctrl ENABLE, PinIdx %d, Val %d\n",
+		__func__, pin, pin_state);
+	 
 
 	if (pin < IMGSENSOR_HW_PIN_PDN ||
 #ifdef MIPI_SWITCH
-	    pin > IMGSENSOR_HW_PIN_MIPI_SWITCH_SEL ||
+		pin > IMGSENSOR_HW_PIN_MIPI_SWITCH_SEL ||
 #else
-		pin > IMGSENSOR_HW_PIN_DOVDD ||
+		pin > IMGSENSOR_HW_PIN_AVDD1 ||
 #endif
 		pin_state < IMGSENSOR_HW_PIN_STATE_LEVEL_0 ||
 		pin_state > IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH ||
@@ -157,7 +162,6 @@ static enum IMGSENSOR_RETURN gpio_set(
 	}
 
 	mutex_lock(pgpio->pgpio_mutex);
-
 	if (ppinctrl_state != NULL && !IS_ERR(ppinctrl_state))
 		pinctrl_select_state(pgpio->ppinctrl, ppinctrl_state);
 	else

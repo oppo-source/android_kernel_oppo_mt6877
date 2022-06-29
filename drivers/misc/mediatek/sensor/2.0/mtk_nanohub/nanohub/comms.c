@@ -242,9 +242,11 @@ static int get_reply(struct nanohub_data *data,
 	int ret;
 
 	ret = read_ack(data, response, data->comms.timeout_ack);
+        pr_info("%s: read_ack ret = %d\n", __func__, ret);
 
 	if (ret >= 0 && response->seq == seq) {
 		if (response->reason == CMD_COMMS_ACK) {
+                        pr_info("%s: response->reason = CMD_COMMS_ACK\n", __func__);
 			if (response->len == sizeof(data->interrupts))
 				memcpy(data->interrupts, response->data,
 				       response->len);
@@ -253,6 +255,7 @@ static int get_reply(struct nanohub_data *data,
 			if (ret < 0)
 				ret = ERROR_NACK;
 		} else {
+                        pr_info("%s: response->reason = 0x%d\n", __func__, response->reason);
 			if (response->reason == CMD_COMMS_NACK)
 				ret = ERROR_NACK;
 			else if (response->reason == CMD_COMMS_BUSY)
@@ -275,9 +278,11 @@ static int nanohub_comms_tx_rx(struct nanohub_data *data,
 
 	ret = data->comms.write(data, (u8 *)&pad->packet, packet_size,
 				data->comms.timeout_write);
+        pr_info("%s: comms.write ret = %d\n", __func__, ret);
 
 	if (ret == packet_size) {
 		ret = get_reply(data, &pad->packet, seq);
+                pr_info("%s: get_reply ret = %d\n", __func__, ret);
 
 		if (ret >= 0) {
 			if (pad->packet.len > 0) {
@@ -297,6 +302,7 @@ static int nanohub_comms_tx_rx(struct nanohub_data *data,
 		ret = ERROR_NACK;
 	}
 
+        pr_info("%s ret = %d\n", __func__, ret);
 	return ret;
 }
 
@@ -373,6 +379,7 @@ int nanohub_comms_tx_rx_retrans(struct nanohub_data *data, u32 cmd,
 	seq = data->comms.seq++;
 
 	do {
+                pr_info("%s retrans_cnt = %d ...\n", __func__, retrans_cnt);
 		packet_size =
 		    packet_create(&pad->packet, seq, cmd, tx_len, tx, user);
 
@@ -402,6 +409,7 @@ int nanohub_comms_tx_rx_retrans(struct nanohub_data *data, u32 cmd,
 	mutex_unlock(&data->comms_lock);
 	packet_free(pad);
 
+        pr_info("%s ret = %d\n", __func__, ret);
 	return ret;
 }
 

@@ -21,8 +21,11 @@
 #include "mdee_dumper_v5.h"
 #include "ccci_config.h"
 #include "ccci_fsm_sys.h"
-#include "ccci_fsm.h"
-#include "modem_sys.h"
+
+//#ifdef VENDOR_EDIT
+//Add for monitor modem crash
+#include <soc/oppo/mmkey_log.h>
+//#endif /*VENDOR_EDIT*/
 
 #ifndef DB_OPT_DEFAULT
 #define DB_OPT_DEFAULT    (0)	/* Dummy macro define to avoid build error */
@@ -37,8 +40,10 @@ static void ccci_aed_v5(struct ccci_fsm_ee *mdee, unsigned int dump_flag,
 {
 	void *ex_log_addr = NULL;
 	int ex_log_len = 0;
+#if defined(CONFIG_MTK_AEE_FEATURE)
 	void *md_img_addr = NULL;
 	int md_img_len = 0;
+#endif
 	int info_str_len = 0;
 	char *buff;		/*[AED_STR_LEN]; */
 #if defined(CONFIG_MTK_AEE_FEATURE)
@@ -55,6 +60,16 @@ static void ccci_aed_v5(struct ccci_fsm_ee *mdee, unsigned int dump_flag,
 	struct ccci_per_md *per_md_data = ccci_get_per_md_data(mdee->md_id);
 	int md_dbg_dump_flag = per_md_data->md_dbg_dump_flag;
 #endif
+
+//#ifdef VENDOR_EDIT
+//Add for monitor modem crash
+    int temp_i;
+    int checkID = 0;
+    unsigned int hashId = 0;
+    char *logBuf;
+    char *aed_str_for_hash = NULL;
+//#endif /*VENDOR_EDIT*/
+
 	int ret = 0;
 
 	if (!mem_layout) {
@@ -84,6 +99,51 @@ static void ccci_aed_v5(struct ccci_fsm_ee *mdee, unsigned int dump_flag,
 		goto err_exit1;
 	}
 	memset(mdee->ex_start_time, 0x0, sizeof(mdee->ex_start_time));
+//#ifdef VENDOR_EDIT
+//Add for monitor modem crash
+  #define MCU_CORE_MSG "(MCU_core"
+  aed_str_for_hash = aed_str;
+  if( aed_str_for_hash != NULL ) {
+    if( (strncmp(aed_str_for_hash, MCU_CORE_MSG, strlen(MCU_CORE_MSG)) == 0) ) {
+      while(aed_str_for_hash[0] != '\n') {
+        ++aed_str_for_hash;
+      }
+      ++aed_str_for_hash; //skip '\n'
+    }
+    hashId = BKDRHash(aed_str_for_hash, strlen(aed_str_for_hash));
+  }
+  else {
+    CCCI_ERROR_LOG(md_id, FSM, "aed_str_for_hash is null!!");
+  }
+  logBuf = vmalloc(BUF_LOG_LENGTH);
+  if ((logBuf != NULL)&&(aed_str_for_hash != NULL)) {
+    for (temp_i = 0 ; (temp_i < BUF_LOG_LENGTH) && (temp_i < strlen(aed_str_for_hash)) ; temp_i++) {
+      /*
+      if(aed_str_for_hash[temp_i] == '\n') {
+        logBuf[temp_i] = '\0';
+        break;
+      }
+      logBuf[temp_i] = aed_str_for_hash[temp_i];
+      */
+     if(aed_str_for_hash[temp_i] == '\n') {
+          checkID++;
+          CCCI_ERROR_LOG(md_id, FSM, "checkID = %d",checkID);
+          if(2 == checkID) {
+              logBuf[temp_i] = '\0';
+              break;
+          }
+          logBuf[temp_i] = ' ';
+      }else {
+          logBuf[temp_i] = aed_str_for_hash[temp_i];
+      }
+      //end
+    }
+    logBuf[BUF_LOG_LENGTH - 1] = '\0';
+    CCCI_NORMAL_LOG(md_id, FSM, "modem crash wirte to critical log. hashid = %u, cause = %s.", hashId, logBuf);
+    mm_keylog_write_modemdump(hashId, logBuf, MODEM_MONITOR_ID, "modem");
+    vfree(logBuf);
+  }
+//#endif /*VENDOR_EDIT*/
 	/* MD ID must sync with aee_dump_ccci_debug_info() */
  err_exit1:
 	if (dump_flag & CCCI_AED_DUMP_CCIF_REG) {
@@ -101,10 +161,6 @@ static void ccci_aed_v5(struct ccci_fsm_ee *mdee, unsigned int dump_flag,
 	if (dump_flag & CCCI_AED_DUMP_EX_PKT) {
 		ex_log_addr = (void *)dumper->ex_pl_info;
 		ex_log_len = MD_HS1_FAIL_DUMP_SIZE;
-	}
-	if (dump_flag & CCCI_AED_DUMP_MD_IMG_MEM) {
-		md_img_addr = (void *)mem_layout->md_bank0.base_ap_view_vir;
-		md_img_len = MD_IMG_DUMP_SIZE;
 	}
 	if (buff == NULL) {
 		fsm_sys_mdee_info_notify(aed_str);
@@ -877,7 +933,6 @@ static struct md_ee_ops mdee_ops_v5 = {
 };
 
 #if (MD_GENERATION >= 6297)
-#ifndef MTK_EMI_MPU_DISABLE
 static void mdee_dumper_v5_emimpu_callback(
 		unsigned int emi_id,
 		struct reg_info_t *dump,
@@ -885,18 +940,7 @@ static void mdee_dumper_v5_emimpu_callback(
 {
 	int i, s;
 	int c = 0;
-	int md_state;
 	struct ccci_fsm_ctl *ctl = fsm_get_entity_by_md_id(0);
-	struct ccci_modem *md = ccci_md_get_modem_by_id(0);
-
-	if (md) {
-		md_state = ccci_fsm_get_md_state(md->index);
-		if (md_state != INVALID && md_state != GATED &&
-			md_state != WAITING_TO_STOP) {
-			if (md->ops->dump_info)
-				md->ops->dump_info(md, DUMP_FLAG_REG, NULL, 0);
-		}
-	}
 
 	if (!dump) {
 		CCCI_ERROR_LOG(0, FSM,
@@ -933,7 +977,13 @@ static void mdee_dumper_v5_emimpu_callback(
 	}
 }
 #endif
-#endif
+
+int __weak mtk_emimpu_md_handling_register(void (*md_handling_func)
+	(unsigned int emi_id, struct reg_info_t *dump, unsigned int leng))
+{
+	CCCI_ERROR_LOG(-1, FSM, "[%s] is not supported!\n", __func__);
+	return -1;
+}
 
 int mdee_dumper_v5_alloc(struct ccci_fsm_ee *mdee)
 {
@@ -941,13 +991,11 @@ int mdee_dumper_v5_alloc(struct ccci_fsm_ee *mdee)
 	int md_id = mdee->md_id;
 
 #if (MD_GENERATION >= 6297)
-#ifndef MTK_EMI_MPU_DISABLE
 	if (mtk_emimpu_md_handling_register(
 			&mdee_dumper_v5_emimpu_callback))
 		CCCI_ERROR_LOG(md_id, FSM,
 			"%s: mtk_emimpu_md_handling_register fail\n",
 			__func__);
-#endif
 #endif
 	/* Allocate port_proxy obj and set all member zero */
 	dumper = kzalloc(sizeof(struct mdee_dumper_v5), GFP_KERNEL);
@@ -961,3 +1009,22 @@ int mdee_dumper_v5_alloc(struct ccci_fsm_ee *mdee)
 	return 0;
 }
 
+//#ifdef VENDOR_EDIT
+//Add for monitor modem crash
+unsigned int BKDRHash(const char* str, unsigned int len)
+{
+     unsigned int seed = 131; /* 31 131 1313 13131 131313 etc.. */
+     unsigned int hash = 0;
+     int i    = 0;
+
+    if (str == NULL) {
+        return 0;
+    }
+
+    for(i = 0; i < len; str++, i++) {
+        hash = (hash * seed) + (*str);
+    }
+
+    return hash;
+}
+//#endif /*VENDOR_EDIT*/

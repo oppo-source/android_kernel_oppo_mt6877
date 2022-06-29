@@ -116,11 +116,7 @@ static const char BRISKET2_LIST_NAME[][40] = {
 	CttEn,
 	TestMode,
 	GlobalEventEn,
-	SafeFreqReqOverride,
-	"Cfg",
-	"PollingEn",
-	SafeFreqEn,
-	SafeFreqBypass,
+	SafeFreqReqOverride
 };
 
 static const char BRISKET2_RW_REG_NAME[][5] = {
@@ -133,7 +129,6 @@ static const char BRISKET2_RW_REG_NAME[][5] = {
 #ifndef CONFIG_FPGA_EARLY_PORTING
 #ifdef CONFIG_OF_RESERVED_MEM
 
-#ifdef PTP3_STATUS_PROBE_DUMP
 static char *brisket2_buf;
 static unsigned long long brisket2_mem_size;
 void brisket2_save_memory_info(char *buf, unsigned long long ptp3_mem_size)
@@ -232,12 +227,10 @@ int brisket2_reserve_memory_dump(char *buf, unsigned long long ptp3_mem_size,
 
 #endif
 #endif
-#endif
 
 /************************************************
  * IPI between kernel and mcupm/cpu_eb
  ************************************************/
-#if 0
 #ifdef CONFIG_MTK_TINYSYS_MCUPM_SUPPORT
 static void brisket2_ipi_handle(unsigned int cfg, unsigned int val)
 {
@@ -250,11 +243,9 @@ static void brisket2_ipi_handle(unsigned int cfg, unsigned int val)
 	brisket2_msg("[%s]:cfg(%d) val(%d)\n",
 		__func__, cfg, val);
 
-#if 0
 	/* update mcupm or cpueb via ipi */
 	while (ptp3_ipi_handle(&brisket2_data) != 0)
 		udelay(500);
-#endif
 }
 #else
 static void brisket2_ipi_handle(unsigned int cpu, unsigned int group,
@@ -262,7 +253,6 @@ static void brisket2_ipi_handle(unsigned int cpu, unsigned int group,
 {
 	brisket2_msg("IPI from kernel to MCUPM not exist\n");
 }
-#endif
 #endif
 
 /************************************************
@@ -272,44 +262,6 @@ static void brisket2_ipi_handle(unsigned int cpu, unsigned int group,
 /************************************************
  * set BRISKET2 status by procfs interface
  ************************************************/
-static int brisket2_safeFreq_proc_show(struct seq_file *m, void *v)
-{
-	unsigned int cfg = 0;
-	unsigned int cpu, value, option;
-
-	for (cpu = BRISKET2_CPU_START_ID; cpu <= BRISKET2_CPU_END_ID; cpu++) {
-		seq_printf(m, BRISKET2_TAG"[CPU%d]", cpu);
-
-		for (option = BRISKET2_LIST_SafeFreqEn;
-			option <= BRISKET2_LIST_SafeFreqBypass; option++) {
-
-			/* encode cfg */
-			/*
-			 *	cfg[15:8] option
-			 *	cfg[31:28] cpu
-			 */
-			cfg = (option << BRISKET2_CFG_OFFSET_OPTION) & BRISKET2_CFG_BITMASK_OPTION;
-			cfg |= (cpu << BRISKET2_CFG_OFFSET_CPU) & BRISKET2_CFG_BITMASK_CPU;
-
-			/* update via atf */
-			value = ptp3_smc_handle(
-				PTP3_FEATURE_BRISKET2,
-				BRISKET2_NODE_LIST_READ,
-				cfg,
-				0);
-
-			if (option != BRISKET2_LIST_SafeFreqBypass)
-				seq_printf(m, " %s:0x%x,",
-					BRISKET2_LIST_NAME[option], value);
-			else
-				seq_printf(m, " %s:0x%x;\n",
-					BRISKET2_LIST_NAME[option], value);
-
-		}
-	}
-	return 0;
-}
-
 static ssize_t brisket2_ctrl_proc_write(struct file *file,
 	const char __user *buffer, size_t count, loff_t *pos)
 {
@@ -731,10 +683,8 @@ static ssize_t brisket2_pollingEn_proc_write(struct file *file,
 		return ret;
 	}
 
-#if 0
 	/* update via mcupm or cpu_eb */
 	brisket2_ipi_handle(BRISKET2_IPI_CFG_POLLING, pollingEn);
-#endif
 
 out:
 	free_page((unsigned long)buf);
@@ -773,7 +723,7 @@ static int brisket2_pollingEn_proc_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-PROC_FOPS_RO(brisket2_safeFreq);
+
 PROC_FOPS_RW(brisket2_ctrl);
 PROC_FOPS_RO(brisket2_dump);
 PROC_FOPS_RW(brisket2_reg);
@@ -792,7 +742,6 @@ int brisket2_create_procfs(const char *proc_name, struct proc_dir_entry *dir)
 	};
 
 	struct pentry brisket2_entries[] = {
-		PROC_ENTRY(brisket2_safeFreq),
 		PROC_ENTRY(brisket2_ctrl),
 		PROC_ENTRY(brisket2_dump),
 		PROC_ENTRY(brisket2_reg),
@@ -864,26 +813,41 @@ int brisket2_probe(struct platform_device *pdev)
 #endif /* CONFIG_OF */
 
 #ifdef CONFIG_OF_RESERVED_MEM
-#ifdef PTP3_STATUS_PROBE_DUMP
 	/* dump reg status into PICACHU dram for DB */
 	if (brisket2_buf != NULL) {
 		brisket2_reserve_memory_dump(
 			brisket2_buf, brisket2_mem_size, BRISKET2_TRIGGER_STAGE_PROBE);
 	}
-#endif /* PTP3_STATUS_PROBE_DUMP */
 #endif /* CONFIG_OF_RESERVED_MEM */
-
 #endif /* CONFIG_FPGA_EARLY_PORTING */
 	return 0;
 }
 
 int brisket2_suspend(struct platform_device *pdev, pm_message_t state)
 {
+#ifndef CONFIG_FPGA_EARLY_PORTING
+#ifdef CONFIG_OF_RESERVED_MEM
+	/* dump reg status into PICACHU dram for DB */
+	if (brisket2_buf != NULL) {
+		brisket2_reserve_memory_dump(
+			brisket2_buf+0x1000, brisket2_mem_size, BRISKET2_TRIGGER_STAGE_SUSPEND);
+	}
+#endif /* CONFIG_OF_RESERVED_MEM */
+#endif /* CONFIG_FPGA_EARLY_PORTING */
 	return 0;
 }
 
 int brisket2_resume(struct platform_device *pdev)
 {
+#ifndef CONFIG_FPGA_EARLY_PORTING
+#ifdef CONFIG_OF_RESERVED_MEM
+	/* dump reg status into PICACHU dram for DB */
+	if (brisket2_buf != NULL) {
+		brisket2_reserve_memory_dump(
+			brisket2_buf+0x2000, brisket2_mem_size, BRISKET2_TRIGGER_STAGE_RESUME);
+	}
+#endif /* CONFIG_OF_RESERVED_MEM */
+#endif /* CONFIG_FPGA_EARLY_PORTING */
 	return 0;
 }
 

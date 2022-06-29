@@ -3,6 +3,7 @@
  * Copyright (c) 2019 MediaTek Inc.
  */
 
+
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/of.h>
@@ -12,8 +13,7 @@
 #include <linux/rtc.h>
 #include <linux/wakeup_reason.h>
 #include <linux/syscore_ops.h>
-#include <mt6885_cond.h>
-#include <mtk_lpm_module.h>
+
 #include <aee.h>
 #include <mtk_lpm.h>
 
@@ -41,17 +41,6 @@ struct mt6885_log_helper mt6885_logger_help = {
 	.wakesrc = &mt6885_wake,
 	.cur = 0,
 	.prev = 0,
-};
-
-static char *mt6885_spm_cond_cg_str[PLAT_SPM_COND_MAX] = {
-	[PLAT_SPM_COND_MTCMOS_0]	= "MTCMOS_0",
-	[PLAT_SPM_COND_CG_INFRA_0]	= "INFRA_0",
-	[PLAT_SPM_COND_CG_INFRA_1]	= "INFRA_1",
-	[PLAT_SPM_COND_CG_INFRA_2]	= "INFRA_2",
-	[PLAT_SPM_COND_CG_INFRA_3]	= "INFRA_3",
-	[PLAT_SPM_COND_CG_MMSYS_0]	= "MMSYS_0",
-	[PLAT_SPM_COND_CG_MMSYS_1]	= "MMSYS_1",
-	[PLAT_SPM_COND_CG_MMSYS_2]	= "MMSYS_2",
 };
 
 const char *mt6885_wakesrc_str[32] = {
@@ -339,22 +328,6 @@ static void mt6885_suspend_show_detailed_wakeup_reason
 		}
 	}
 }
-static void dump_lp_cond(void)
-{
-#define MT6885_DBG_SMC(_id, _act, _rc, _param) ({\
-	(u32) mtk_lpm_smc_spm_dbg(_id, _act, _rc, _param); })
-
-	int i;
-	u32 blkcg;
-
-	for (i = 1 ; i < PLAT_SPM_COND_MAX ; i++) {
-		blkcg = MT6885_DBG_SMC(MT_SPM_DBG_SMC_UID_BLOCK_DETAIL, MT_LPM_SMC_ACT_GET, 0, i);
-		if (blkcg != 0)
-			printk_deferred("suspend warning: CG: %6s = 0x%08lx\n"
-				, mt6885_spm_cond_cg_str[i], blkcg);
-
-	}
-}
 
 static void mt6885_suspend_spm_rsc_req_check
 	(struct mt6885_spm_wake_status *wakesta)
@@ -434,11 +407,10 @@ static u32 is_blocked_cnt;
 			LOG_BUF_SIZE - log_size, "apu ");
 
 	src_req = plat_mmio_read(SPM_SRC_REQ);
-	if (src_req & 0x9B) {
-		dump_lp_cond();
+	if (src_req & 0x9B)
 		log_size += scnprintf(log_buf + log_size,
 			LOG_BUF_SIZE - log_size, "spm ");
-	}
+
 	WARN_ON(strlen(log_buf) >= LOG_BUF_SIZE);
 
 	printk_deferred("[name:spm&][SPM] %s", log_buf);
@@ -643,6 +615,9 @@ static int mt6885_show_message(struct mt6885_spm_wake_status *wakesrc, int type,
 	if (type == MT_LPM_ISSUER_SUSPEND) {
 		printk_deferred("[name:spm&][SPM] %s", log_buf);
 		mt6885_suspend_show_detailed_wakeup_reason(wakesrc);
+		#ifdef VENDOR_EDIT
+		record_suspend_r13_info(mt6885_wake.r13, mt6885_wake.debug_flag, mt6885_wake.timer_out, plat_mmio_read(SPM_BK_VTCXO_DUR));
+		#endif
 		mt6885_suspend_spm_rsc_req_check(wakesrc);
 
 		printk_deferred("[name:spm&][SPM] Suspended for %d.%03d seconds",
@@ -817,10 +792,8 @@ int __init mt6885_logger_init(void)
 	mtk_lpm_sysfs_root_entry_create();
 	mt6885_logger_timer_debugfs_init();
 
-	preempt_disable();
 	dev = cpuidle_get_device();
 	drv = cpuidle_get_cpu_driver(dev);
-	preempt_enable();
 	mt6885_logger_fired.state_index = -1;
 
 	if (drv) {
@@ -851,3 +824,74 @@ int __init mt6885_logger_init(void)
 }
 late_initcall_sync(mt6885_logger_init);
 
+
+#ifdef VENDOR_EDIT
+#define R13_IGNORE_BIT  (0x84040880)
+#define R13_BIT_EXPAND(BITINFO) {BITINFO, #BITINFO, 0}
+
+struct mt6885_sleep_static_info mt6885_sleep_oplus_info;
+struct r13_blocker_detail_info mt6885_wakeup_r13_table[] = {
+	R13_BIT_EXPAND(R13_MD_SRCCLKENA_0),
+	R13_BIT_EXPAND(R13_MD_APSRC_REQ_0),
+	R13_BIT_EXPAND(R13_MD_SRCCLKENA_1),
+	R13_BIT_EXPAND(R13_MD_DDR_EN_0),
+	R13_BIT_EXPAND(R13_MD_VRF18_REQ_0),
+	R13_BIT_EXPAND(R13_MD1_STATE),
+	R13_BIT_EXPAND(R13_CONN_DDR_EN),
+	R13_BIT_EXPAND(R13_CONN_STATE),
+	R13_BIT_EXPAND(R13_CONN_SRCCLKENA),
+	R13_BIT_EXPAND(R13_CONN_APSRC_REQ),
+	R13_BIT_EXPAND(R13_SCP_STATE),
+	R13_BIT_EXPAND(R13_AUDIO_DSP_STATE)
+};
+
+int mt6885_wakeup_r13_table_size = sizeof(mt6885_wakeup_r13_table)/sizeof(mt6885_wakeup_r13_table[0]);
+void record_suspend_r13_count_clear(void)
+{
+	int i = 0;
+	mt6885_sleep_oplus_info.kernel_sleep_duration = 0;
+	mt6885_sleep_oplus_info.deep_sleep_duration = 0;
+	mt6885_sleep_oplus_info.deep_sleep_count = 0;
+	mt6885_sleep_oplus_info.ndeep_sleep_duration = 0;
+	mt6885_sleep_oplus_info.ndeep_sleep_count = 0;
+	for(i= 0; i< mt6885_wakeup_r13_table_size; i++) {
+		 mt6885_wakeup_r13_table[i].count = 0;
+		 mt6885_wakeup_r13_table[i].duration = 0;
+	}
+}
+EXPORT_SYMBOL(record_suspend_r13_count_clear);
+
+void get_mt6885_wakeup_r13_table(struct mt6885_sleep_static_info **address, struct r13_blocker_detail_info **base, int **size)
+{
+	*address = &mt6885_sleep_oplus_info;
+	*base = &mt6885_wakeup_r13_table[0];
+	*size = &mt6885_wakeup_r13_table_size;
+	return;
+}
+EXPORT_SYMBOL(get_mt6885_wakeup_r13_table);
+
+void record_suspend_r13_info(u32 r13, u32 debug_flag, u32 timer_out, u32 clock_26m_off)
+{
+	int i = 0;
+	u64 ndeep_sleep_duration_cur = 0;
+	mt6885_sleep_oplus_info.kernel_sleep_duration += timer_out;
+	mt6885_sleep_oplus_info.deep_sleep_duration   += clock_26m_off;
+	ndeep_sleep_duration_cur = timer_out > clock_26m_off ? timer_out - clock_26m_off : 0;
+	mt6885_sleep_oplus_info.ndeep_sleep_duration  += ndeep_sleep_duration_cur;
+	if((debug_flag & 0xff) == 0xff) {
+		mt6885_sleep_oplus_info.deep_sleep_count++;
+		return;
+	}
+	//r13 = r13 & (~((u32)R13_IGNORE_BIT));
+	mt6885_sleep_oplus_info.ndeep_sleep_count++;
+	for(i= 0; i< mt6885_wakeup_r13_table_size; i++) {
+		if((r13 & mt6885_wakeup_r13_table[i].bitinfo) != 0) {
+			mt6885_wakeup_r13_table[i].count++;
+			mt6885_wakeup_r13_table[i].duration += ndeep_sleep_duration_cur;
+			//printk_deferred("%s debug_flag=0x%x r13_set_bit=%s\n", __func__, debug_flag, mt6885_wakeup_r13_table[i].name);
+		}
+	}
+	return;
+}
+EXPORT_SYMBOL(record_suspend_r13_info);
+#endif

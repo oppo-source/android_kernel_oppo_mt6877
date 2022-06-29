@@ -122,6 +122,8 @@ static void phy_efuse_settings(struct mtk_phy_instance *instance)
 	u32 evalue;
 
 	evalue = (get_devinfo_with_index(108) & (0x1f<<0)) >> 0;
+	evalue = 0x1E;
+	/*END*/
 	if (evalue) {
 		phy_printk(K_INFO, "RG_USB20_INTR_CAL=0x%x\n",
 			evalue);
@@ -524,7 +526,13 @@ static void phy_recover(struct mtk_phy_instance *instance)
 	phy_efuse_settings(instance);
 
 	u3phywrite32(U3D_USBPHYACR6, RG_USB20_DISCTH_OFST,
+		RG_USB20_DISCTH, 0xD);
+/*ELSE*/
+/*
+	u3phywrite32(U3D_USBPHYACR6, RG_USB20_DISCTH_OFST,
 		RG_USB20_DISCTH, 0x7);
+*/
+/*END*/
 
 	usb_phy_tuning(instance);
 	phy_advance_settings(instance);

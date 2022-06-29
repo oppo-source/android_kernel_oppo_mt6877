@@ -2744,6 +2744,55 @@ static signed int DIP_Dump_IMGSYS_DIP_Reg(void)
 			DipDumpTL[DIPNo].region,
 			DIP_RD32(dipRegBasAddr + 0x880));
 
+
+		cmdq_util_err("nr3d: 0x%x8000(0x%x)-0x%x8004(0x%x)",
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x7000),
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x7004));
+		cmdq_util_err("nr3d: 0x%x8008(0x%x)-0x%x800c(0x%x)",
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x7008),
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x700c));
+		cmdq_util_err("nr3d: 0x%x8010(0x%x)-0x%x8014(0x%x)",
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x7010),
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x7014));
+		cmdq_util_err("nr3d: 0x%x8218(0x%x)-0x%x821c(0x%x)",
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x7218),
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x721c));
+		cmdq_util_err("nr3d: 0x%x8220(0x%x)-0x%x8224(0x%x)",
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x7220),
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x7224));
+		cmdq_util_err("nr3d: 0x%x8228(0x%x)-0x%x822c(0x%x)",
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x7228),
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x722c));
+		cmdq_util_err("mix_d2: 0x%x7b40(0x%x)-0x%x7b44(0x%x)",
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x6b40),
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x6b44));
+
+
+		cmdq_util_err("dce: 0x%x7000(0x%x)-0x%x7088(0x%x)",
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x6000),
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x6088));
+		cmdq_util_err("dce: 0x%x708C(0x%x)-0x%x7090(0x%x)",
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x608C),
+			DipDumpTL[DIPNo].region,
+			DIP_RD32(dipRegBasAddr + 0x6090));
+
 		/* CRZ */
 		cmdq_util_err("crz: 0x%x8700(0x%x)-0x%x8704(0x%x)",
 			DipDumpTL[DIPNo].region,
@@ -7853,6 +7902,18 @@ enum m4u_callback_ret_t ISP_M4U_TranslationFault_callback(int port,
 			DIP_RD32(DIP_A_BASE + 0x700c),
 			DIP_RD32(DIP_A_BASE + 0x7010),
 			DIP_RD32(DIP_A_BASE + 0x7014));
+		pr_info("nr3d int1:0x%08x, int2:0x%08x, int3:0x%08x\n",
+			DIP_RD32(DIP_A_BASE + 0x7218),
+			DIP_RD32(DIP_A_BASE + 0x721c),
+			DIP_RD32(DIP_A_BASE + 0x7220));
+		pr_info("nr3d out_cnt:0x%08x, status:0x%08x\n",
+			DIP_RD32(DIP_A_BASE + 0x7224),
+			DIP_RD32(DIP_A_BASE + 0x7228));
+		pr_info("mix_d2 ctl0:0x%08x, cltl1:0x%08x\n",
+			DIP_RD32(DIP_A_BASE + 0x6b40),
+			DIP_RD32(DIP_A_BASE + 0x6b44));
+
+
 
 		pr_info("TDRI:0x%08x, CQ0_EN(0x%08x)_BA(0x%08x),",
 			DIP_RD32(DIP_A_BASE + 0x004),

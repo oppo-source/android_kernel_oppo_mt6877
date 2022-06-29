@@ -11,6 +11,13 @@
  * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
  */
 
+#include <linux/init.h>
+//#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/time.h>
+#include <linux/timer.h>
+
+
 #include <linux/interrupt.h>
 #include <linux/mfd/core.h>
 #include <linux/module.h>
@@ -35,6 +42,99 @@
 #include <linux/mfd/mt6390/registers.h>
 #endif
 #include <linux/mfd/mt6358/core.h>
+#include <linux/wakeup_reason.h>
+#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+const char *wakeup_irq_name="NULL";
+#define GET_IRQ_NAME(x)   case x: return(#x);
+static inline char *change_enum_to_string(enum mt6358_irq_numbers type){
+     switch (type)
+     {
+		GET_IRQ_NAME(MT6358_IRQ_VPROC11_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VPROC12_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VCORE_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VGPU_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VMODEM_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VDRAM1_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VS1_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VS2_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VPA_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VCORE_PREOC)
+		GET_IRQ_NAME(MT6358_IRQ_VFE28_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VXO22_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VRF18_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VRF12_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VEFUSE_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VCN33_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VCN28_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VCN18_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VCAMA1_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VCAMA2_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VCAMD_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VCAMIO_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VLDO28_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VA12_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VAUX18_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VAUD28_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VIO28_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VIO18_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VSRAM_PROC11_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VSRAM_PROC12_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VSRAM_OTHERS_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VSRAM_GPU_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VDRAM2_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VMC_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VMCH_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VEMC_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VSIM1_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VSIM2_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VIBR_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VUSB_OC)
+		GET_IRQ_NAME(MT6358_IRQ_VBIF28_OC)
+		GET_IRQ_NAME(MT6358_IRQ_PWRKEY)
+		GET_IRQ_NAME(MT6358_IRQ_HOMEKEY)
+		GET_IRQ_NAME(MT6358_IRQ_PWRKEY_R)
+		GET_IRQ_NAME(MT6358_IRQ_HOMEKEY_R)
+		GET_IRQ_NAME(MT6358_IRQ_NI_LBAT_INT)
+		GET_IRQ_NAME(MT6358_IRQ_CHRDET)
+		GET_IRQ_NAME(MT6358_IRQ_CHRDET_EDGE)
+		GET_IRQ_NAME(MT6358_IRQ_VCDT_HV_DET)
+		GET_IRQ_NAME(MT6358_IRQ_RTC)
+		GET_IRQ_NAME(MT6358_IRQ_FG_BAT0_H)
+		GET_IRQ_NAME(MT6358_IRQ_FG_BAT0_L)
+		GET_IRQ_NAME(MT6358_IRQ_FG_CUR_H)
+		GET_IRQ_NAME(MT6358_IRQ_FG_CUR_L)
+		GET_IRQ_NAME(MT6358_IRQ_FG_ZCV)
+		GET_IRQ_NAME(MT6358_IRQ_FG_BAT1_H)
+		GET_IRQ_NAME(MT6358_IRQ_FG_BAT1_L)
+		GET_IRQ_NAME(MT6358_IRQ_FG_N_CHARGE_L)
+		GET_IRQ_NAME(MT6358_IRQ_FG_IAVG_H)
+		GET_IRQ_NAME(MT6358_IRQ_FG_IAVG_L)
+		GET_IRQ_NAME(MT6358_IRQ_FG_TIME_H)
+		GET_IRQ_NAME(MT6358_IRQ_FG_DISCHARGE)
+		GET_IRQ_NAME(MT6358_IRQ_FG_CHARGE)
+		GET_IRQ_NAME(MT6358_IRQ_BATON_LV)
+		GET_IRQ_NAME(MT6358_IRQ_BATON_HT)
+		GET_IRQ_NAME(MT6358_IRQ_BATON_BAT_IN)
+		GET_IRQ_NAME(MT6358_IRQ_BATON_BAT_OUT)
+		GET_IRQ_NAME(MT6358_IRQ_BIF)
+		GET_IRQ_NAME(MT6358_IRQ_BAT_H)
+		GET_IRQ_NAME(MT6358_IRQ_BAT_L)
+		GET_IRQ_NAME(MT6358_IRQ_BAT2_H)
+		GET_IRQ_NAME(MT6358_IRQ_BAT2_L)
+		GET_IRQ_NAME(MT6358_IRQ_BAT_TEMP_H)
+		GET_IRQ_NAME(MT6358_IRQ_BAT_TEMP_L)
+		GET_IRQ_NAME(MT6358_IRQ_AUXADC_IMP)
+		GET_IRQ_NAME(MT6358_IRQ_NAG_C_DLTV)
+		GET_IRQ_NAME(MT6358_IRQ_AUDIO)
+		GET_IRQ_NAME(MT6358_IRQ_ACCDET)
+		GET_IRQ_NAME(MT6358_IRQ_ACCDET_EINT0)
+		GET_IRQ_NAME(MT6358_IRQ_ACCDET_EINT1)
+		GET_IRQ_NAME(MT6358_IRQ_SPI_CMD_ALERT)
+		GET_IRQ_NAME(MT6358_IRQ_NR)
+     }
+     return "Unsupported IRQ_NAME";
+}
+#endif/* OPLUS_FEATURE_POWERINFO_STANDBY */
 
 #define MT6357_CID_CODE		0x5700
 #define MT6358_CID_CODE		0x5800
@@ -139,6 +239,13 @@ static struct sp_top_t sp_top_ints[] = {
 
 static struct pmic_irq_t *pmic_irqs;
 
+struct timeval oldtv;
+//static int up_count;
+extern void tp_delta_debug_read_func_another(void);
+
+
+
+
 unsigned int mt6358_irq_get_virq(struct device *dev, unsigned int hwirq)
 {
 	struct mt6358_chip *chip = dev_get_drvdata(dev);
@@ -157,12 +264,37 @@ const char *mt6358_irq_get_name(struct device *dev, unsigned int hwirq)
 }
 EXPORT_SYMBOL(mt6358_irq_get_name);
 
+
+void callback( )
+{
+    struct timeval tv;
+    
+    do_gettimeofday(&tv);
+    //printk("%s: %ld, %ld\n", __func__,
+    //    tv.tv_sec - oldtv.tv_sec,        // s
+    //    tv.tv_usec- oldtv.tv_usec);        // ms
+        
+    if(tv.tv_sec - oldtv.tv_sec <= 1){
+		//up_count++;
+		printk(KERN_ERR "[TP]anjian: up_key down \n");
+		//up_count = 0;
+		//reading delta
+		tp_delta_debug_read_func_another();
+	}
+	oldtv = tv;
+}
+
+
 static void mt6358_irq_sp_handler(struct mt6358_chip *chip,
 				  unsigned int sp)
 {
 	unsigned int sta_reg, sp_int_status = 0;
 	unsigned int hwirq, virq;
 	int ret, i, j;
+	
+	#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+	enum mt6358_irq_numbers irq_name;
+	#endif/* OPLUS_FEATURE_POWERINFO_STANDBY */
 
 	for (i = 0; i < sp_top_ints[sp].num_int_regs; i++) {
 		sta_reg = sp_top_ints[sp].sta_reg + 0x2 * i;
@@ -179,11 +311,25 @@ static void mt6358_irq_sp_handler(struct mt6358_chip *chip,
 				continue;
 			hwirq = sp_top_ints[sp].hwirq_base + 16 * i + j;
 			virq = irq_find_mapping(chip->irq_domain, hwirq);
+			//add lin shi
+			if(hwirq == 49) {
+				callback();
+			}
 			dev_info(chip->dev,
 				"Reg[0x%x]=0x%x,name=%s,hwirq=%d,type=%d\n",
 				sta_reg, sp_int_status,
 				pmic_irqs[hwirq].name, hwirq,
 				irq_get_trigger_type(virq));
+
+			#ifdef OPLUS_FEATURE_POWERINFO_STANDBY
+			irq_name=hwirq;
+			/*irq name define in core.h -> mt6358_irq_numbers*/
+			if((irq_name>=0)&&(irq_name<=145)){
+				wakeup_irq_name=change_enum_to_string(irq_name);
+				dev_info(chip->dev,"[PMIC_INT][%s]\n",wakeup_irq_name);
+			}
+			#endif/* OPLUS_FEATURE_POWERINFO_STANDBY */			
+			log_irq_wakeup_reason(chip->irq);
 			log_threaded_irq_wakeup_reason(virq, chip->irq);
 			if (virq)
 				handle_nested_irq(virq);
@@ -513,6 +659,10 @@ static struct platform_driver mt6358_driver = {
 static int __init mt6358_init(void)
 {
 	pr_info("%s!!\n", __func__);
+	
+	//up_count = 0;
+	do_gettimeofday(&oldtv);     
+    
 	return platform_driver_register(&mt6358_driver);
 }
 fs_initcall(mt6358_init);

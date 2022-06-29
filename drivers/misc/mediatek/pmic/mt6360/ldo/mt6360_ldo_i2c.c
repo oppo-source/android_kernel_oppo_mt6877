@@ -31,6 +31,9 @@ module_param(dbg_log_en, bool, 0644);
 
 static const struct mt6360_ldo_platform_data def_platform_data = {
 	.sdcard_det_en = true,
+#ifdef OPLUS_FEATURE_SDCARD
+	.sdcard_hlact = true,
+#endif /* OPLUS_FEATURE_SDCARD */
 };
 
 struct mt6360_regulator_desc {
@@ -322,12 +325,35 @@ static int mt6360_ldo_enable(struct regulator_dev *rdev)
 	int id = rdev_get_id(rdev), ret;
 
 	mt_dbg(&rdev->dev, "%s, id = %d\n", __func__, id);
+
+#ifdef OPLUS_FEATURE_SDCARD
+	/* Enable SDCARD_DET before LDO5 enables. */
+	if (id == MT6360_LDO_LDO5 && pdata->sdcard_det_en) {
+		ret = mt6360_ldo_reg_update_bits(mli, MT6360_LDO_LDO5_CTRL0,
+						 0x80, pdata->sdcard_hlact ? 0xff : 0);
+		if (ret < 0) {
+			dev_err(&rdev->dev,
+				"%s: sdcard_hlact fail (%d)\n", __func__, ret);
+			return ret;
+		}
+		ret = mt6360_ldo_reg_update_bits(mli, MT6360_LDO_LDO5_CTRL0,
+						 0x40, 0xff);
+		if (ret < 0) {
+			dev_err(&rdev->dev,
+				"%s: en sdcard_det fail (%d)\n", __func__, ret);
+			return ret;
+		}
+	}
+#endif /* OPLUS_FEATURE_SDCARD */
+
 	ret = mt6360_ldo_reg_update_bits(mli, desc->enable_reg,
 					 desc->enable_mask, 0xff);
 	if (ret < 0) {
 		dev_err(&rdev->dev, "%s: fail (%d)\n", __func__, ret);
 		return ret;
 	}
+
+#ifndef OPLUS_FEATURE_SDCARD
 	/* when LDO5 enable, enable SDCARD_DET */
 	if (id == MT6360_LDO_LDO5 && pdata->sdcard_det_en) {
 		ret = mt6360_ldo_reg_update_bits(mli, MT6360_LDO_LDO5_CTRL0,
@@ -338,6 +364,7 @@ static int mt6360_ldo_enable(struct regulator_dev *rdev)
 			return ret;
 		}
 	}
+#endif /* OPLUS_FEATURE_SDCARD */
 	return 0;
 }
 
@@ -639,6 +666,9 @@ static int mt6360_ldo_apply_pdata(struct mt6360_ldo_info *mli,
 
 static const struct mt6360_val_prop mt6360_val_props[] = {
 	MT6360_DT_VALPROP(sdcard_det_en, struct mt6360_ldo_platform_data),
+#ifdef OPLUS_FEATURE_SDCARD
+	MT6360_DT_VALPROP(sdcard_hlact, struct mt6360_ldo_platform_data),
+#endif /* OPLUS_FEATURE_SDCARD */
 };
 
 static int mt6360_ldo_parse_dt_data(struct device *dev,

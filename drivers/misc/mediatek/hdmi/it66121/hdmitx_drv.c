@@ -1559,7 +1559,6 @@ bool setHDMITX_SyncEmbeddedByVIC(unsigned char VIC, unsigned char bInputType)
 
 #endif /* SUPPORT_SYNCEMBEDDED */
 
-/* ~jj_tseng@chipadvanced.com 2007/01/02 */
 
 /* //////////////////////////////////////////////////////////////////// */
 /* Function: hdmitx_SetInputMode */

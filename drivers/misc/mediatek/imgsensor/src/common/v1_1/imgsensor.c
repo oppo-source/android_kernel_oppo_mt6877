@@ -55,6 +55,15 @@
 #if defined(CONFIG_MTK_CAM_SECURE_I2C)
 #include "imgsensor_ca.h"
 #endif
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
+#define OPLUS_FEATURE_CAMERA_COMMON
+#endif
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include "imgsensor_eeprom.h"
+#include "imgsensor_hwcfg_custom.h"
+#define VENDOR_POWERON_TIMES    (3)
+#endif
+
 
 static DEFINE_MUTEX(gimgsensor_mutex);
 static DEFINE_MUTEX(gimgsensor_open_mutex);
@@ -415,6 +424,10 @@ imgsensor_sensor_control(
 		if (ret != ERROR_NONE)
 			PK_PR_ERR("[%s]\n", __func__);
 
+		#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		Oplusimgsensor_powerstate_notify(1, psensor->inst.sensor_idx);
+		#endif
+
 		imgsensor_mutex_unlock(psensor_inst);
 
 		IMGSENSOR_PROFILE(
@@ -473,6 +486,9 @@ MINT32 imgsensor_sensor_close(struct IMGSENSOR_SENSOR *psensor)
 				IMGSENSOR_HW_POWER_STATUS_OFF);
 
 			psensor_inst->state = IMGSENSOR_STATE_CLOSE;
+			#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			Oplusimgsensor_powerstate_notify(0, psensor->inst.sensor_idx);
+			#endif
 		}
 
 		imgsensor_mutex_unlock(psensor_inst);
@@ -494,6 +510,19 @@ static void imgsensor_init_sensor_list(void)
 	const char *penable_sensor;
 	struct device_node *of_node
 		= of_find_compatible_node(NULL, NULL, "mediatek,imgsensor");
+
+	if(is_project(21081)) {
+		PK_INFO("sensor list match sensor_list_21081");
+		psensor_list = gimgsensor_sensor_list_21081;
+	} else if (is_project(0x212A1)) {
+		PK_INFO("sensor list match sensor_list_212A1");
+		psensor_list = gimgsensor_sensor_list_212A1;
+	} else if (is_project(21851) || is_project(21876)) {
+		PK_INFO("sensor list match sensor_list_21851");
+		psensor_list = gimgsensor_sensor_list_21851;
+	} else {
+		PK_INFO("sensor list match oyther");
+	}
 
 	ret = of_property_read_string(of_node, "cust-sensor", &penable_sensor);
 	if (ret < 0) {
@@ -526,20 +555,42 @@ static inline int imgsensor_check_is_alive(struct IMGSENSOR_SENSOR *psensor)
 	MUINT32 retLen = sizeof(MUINT32);
 	struct IMGSENSOR *pimgsensor = &gimgsensor;
 	struct IMGSENSOR_SENSOR_INST *psensor_inst = &psensor->inst;
-
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	MUINT32 j = 0;
 	IMGSENSOR_PROFILE_INIT(&psensor_inst->profile_time);
-	ret = imgsensor_hw_power(&pimgsensor->hw,
-			psensor,
-			IMGSENSOR_HW_POWER_STATUS_ON);
+	for (j = 0; j < VENDOR_POWERON_TIMES; j ++) {
+		ret = imgsensor_hw_power(&pimgsensor->hw, psensor, IMGSENSOR_HW_POWER_STATUS_ON);
+
+		if (ret == IMGSENSOR_RETURN_SUCCESS) {
+			imgsensor_sensor_feature_control(psensor,
+					SENSOR_FEATURE_CHECK_SENSOR_ID,
+					(MUINT8 *) &sensorID, &retLen);
+		}
+		/* not implement this feature ID */
+		if (sensorID == 0 || sensorID == 0xFFFFFFFF) {
+			PK_DBG("Fail to get sensor ID %x\n", sensorID);
+			err = ERROR_SENSOR_CONNECT_FAIL;
+		} else {
+			PK_DBG("Sensor found ID = 0x%x\n", sensorID);
+			err = ERROR_NONE;
+		}
+
+		imgsensor_hw_power(&pimgsensor->hw, psensor, IMGSENSOR_HW_POWER_STATUS_OFF);
+
+		if (err == ERROR_NONE)
+			break;
+	}
+	#else
+	IMGSENSOR_PROFILE_INIT(&psensor_inst->profile_time);
+	ret = imgsensor_hw_power(&pimgsensor->hw, psensor, IMGSENSOR_HW_POWER_STATUS_ON);
 
 	if (ret != IMGSENSOR_RETURN_SUCCESS)
 		return ERROR_SENSOR_CONNECT_FAIL;
 
 	imgsensor_sensor_feature_control(psensor,
-					 SENSOR_FEATURE_CHECK_SENSOR_ID,
-					 (MUINT8 *) &sensorID, &retLen);
+			SENSOR_FEATURE_CHECK_SENSOR_ID,
+			(MUINT8 *) &sensorID, &retLen);
 
-	/* not implement this feature ID */
 	if (sensorID == 0 || sensorID == 0xFFFFFFFF) {
 		PK_DBG("Fail to get sensor ID %x\n", sensorID);
 		err = ERROR_SENSOR_CONNECT_FAIL;
@@ -551,6 +602,7 @@ static inline int imgsensor_check_is_alive(struct IMGSENSOR_SENSOR *psensor)
 	imgsensor_hw_power(&pimgsensor->hw,
 			psensor,
 			IMGSENSOR_HW_POWER_STATUS_OFF);
+	#endif
 	IMGSENSOR_PROFILE(&psensor_inst->profile_time, "CheckIsAlive");
 
 	return err ? -EIO : err;
@@ -568,7 +620,7 @@ int imgsensor_set_driver(struct IMGSENSOR_SENSOR *psensor)
 
 	imgsensor_mutex_init(psensor_inst);
 	imgsensor_i2c_init(&psensor_inst->i2c_cfg,
-	imgsensor_custom_config[
+    imgsensor_custom_config[
 	(unsigned int)psensor_inst->sensor_idx].i2c_dev);
 	imgsensor_i2c_filter_msg(&psensor_inst->i2c_cfg, true);
 
@@ -984,6 +1036,23 @@ static inline int adopt_CAMERA_HW_FeatureControl(void *pBuf)
 
 	/*in case that some structure are passed from user sapce by ptr */
 	switch (pFeatureCtrl->FeatureId) {
+	#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	case SENSOR_FEATURE_SET_SENSOR_OTP:
+		ret = imgsensor_sensor_feature_control(psensor,
+					pFeatureCtrl->FeatureId,
+					(unsigned char *)pFeaturePara,
+					(unsigned int *)&FeatureParaLen);
+		break;
+	case SENSOR_FEATURE_GET_EEPROM_COMDATA:
+	case SENSOR_FEATURE_GET_EEPROM_STEREODATA:
+	case SENSOR_FEATURE_GET_DISTORTIONPARAMS:
+	{
+		enum IMGSENSOR_SENSOR_IDX sensor_idx = psensor->inst.sensor_idx;
+		ret = Eeprom_Control(sensor_idx, pFeatureCtrl->FeatureId,
+						(unsigned char *)pFeaturePara, 0);
+		break;
+	}
+	#endif
 	case SENSOR_FEATURE_SET_MCLK_DRIVE_CURRENT:
 	{
 		MUINT32 __current = (*(MUINT32 *)pFeaturePara);
@@ -1032,6 +1101,7 @@ static inline int adopt_CAMERA_HW_FeatureControl(void *pBuf)
 		break;
 
 	case SENSOR_FEATURE_OPEN:
+		oplus_is_system_camera(*(unsigned int *)pFeaturePara);
 		ret = imgsensor_sensor_open(psensor);
 		break;
 

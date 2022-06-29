@@ -2589,7 +2589,6 @@ int mtk_iommu_get_iova_space(struct device *dev,
 		unsigned long *base, unsigned long *max,
 		int *owner, struct list_head *list)
 {
-	int ret;
 	struct mtk_iommu_domain *dom;
 	struct mtk_iommu_pgtable *pgtable = mtk_iommu_get_pgtable(NULL, 0);
 	unsigned long flags = 0;
@@ -2605,13 +2604,7 @@ int mtk_iommu_get_iova_space(struct device *dev,
 
 	if (pgtable)
 		spin_lock_irqsave(&pgtable->pgtlock, flags);
-	ret = iommu_dma_get_iovad_info(dev, base, max);
-	if (ret) {
-		pr_info("%s, get_iovad_info fail, dev:%s\n",
-			__func__, dev_name(dev));
-		*base = 0;
-		*max = 0;
-	}
+	iommu_dma_get_iovad_info(dev, base, max);
 	if (pgtable)
 		spin_unlock_irqrestore(&pgtable->pgtlock, flags);
 
@@ -4012,6 +4005,12 @@ static void mtk_iommu_pg_after_on(enum subsys_id sys)
 		}
 
 		spin_lock_irqsave(&data->reg_lock, flags);
+		if (data->poweron) {
+			pr_notice("%s, iommu%u already power on, skip restore\n",
+				  __func__, data->m4uid);
+			spin_unlock_irqrestore(&data->reg_lock, flags);
+			continue;
+		}
 		data->poweron = true;
 
 		ret = mtk_iommu_reg_restore(data);
@@ -4048,6 +4047,12 @@ static void mtk_iommu_pg_before_off(enum subsys_id sys)
 		}
 
 		spin_lock_irqsave(&data->reg_lock, flags);
+		if (!data->poweron) {
+			pr_notice("%s, iommu%u already power off, skip backup\n",
+				  __func__, data->m4uid);
+			spin_unlock_irqrestore(&data->reg_lock, flags);
+			continue;
+		}
 		if (data->isr_ref) {
 			spin_unlock_irqrestore(&data->reg_lock, flags);
 			start = sched_clock();
@@ -4168,6 +4173,15 @@ static int mtk_iommu_hw_init(struct mtk_iommu_data *data)
 
 	//writel_relaxed(0, data->base + REG_MMU_STANDARD_AXI_MODE);
 
+	/* add to avoid iommu too busy to finish wr cmd */
+	regval = readl_relaxed(data->base + REG_MMU_WR_LEN_CTRL);
+	pr_info("%s, REG_MMU_WR_LEN_CTRL before config :0x%x\n", __func__, regval);
+
+	/* disable throttling mechanism */
+	regval = regval | F_MMU_WR_LEN_CTRL_THROT_DIS(0) | F_MMU_WR_LEN_CTRL_THROT_DIS(1);
+	writel_relaxed(regval, data->base + REG_MMU_WR_LEN_CTRL);
+	pr_info("%s, REG_MMU_WR_LEN_CTRL after config :0x%x\n", __func__, regval);
+
 	if (devm_request_irq(data->dev, data->irq, mtk_iommu_isr, 0,
 				 dev_name(data->dev), (void *)data)) {
 		writel_relaxed(0, data->base + REG_MMU_PT_BASE_ADDR);
@@ -4181,6 +4195,9 @@ static int mtk_iommu_hw_init(struct mtk_iommu_data *data)
 		GFP_KERNEL | __GFP_ZERO);
 	if (p_reg_backup[m4u_id] == NULL)
 		return -ENOMEM;
+
+	/* enable bank irq */
+	mtk_iommu_atf_call(IOMMU_ATF_BANK_ENABLE_TF, m4u_id, MTK_IOMMU_BANK_COUNT);
 
 #ifdef MTK_M4U_SECURE_IRQ_SUPPORT
 	/* register secure bank irq */

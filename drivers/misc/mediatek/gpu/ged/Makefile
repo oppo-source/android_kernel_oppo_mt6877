@@ -32,7 +32,7 @@ ccflags-y += -DGED_ENABLE_FB_DVFS
 ccflags-y += -DGED_ENABLE_DYNAMIC_DVFS_MARGIN
 ccflags-y += -DGED_CONFIGURE_LOADING_BASE_DVFS_STEP
 ccflags-y += -DGED_ENABLE_TIMER_BASED_DVFS_MARGIN
-ccflags-y += -DMTK_CPUFREQ
+#ccflags-y += -DMTK_CPUFREQ
 ccflags-y += -DGED_ENABLE_DVFS_LOADING_MODE
 endif
 
@@ -45,6 +45,15 @@ ccflags-y += \
     -I$(srctree)/drivers/misc/mediatek/video/mt6833/videox \
     -I$(srctree)/drivers/misc/mediatek/video/mt6833/dispsys \
     -I$(srctree)/drivers/misc/mediatek/sspm/mt6833
+endif
+
+ifeq ($(CONFIG_MACH_MT6877),y)
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v3/mt6877
+ccflags-y += \
+    -I$(MTK_TOP)/base/power/mt6877/ \
+    -I$(srctree)/drivers/misc/mediatek/video/mt6877/videox \
+    -I$(srctree)/drivers/misc/mediatek/video/mt6877/dispsys \
+    -I$(srctree)/drivers/misc/mediatek/sspm/mt6877
 endif
 
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/v3/$(subst ",,$(CONFIG_MTK_PLATFORM))
@@ -439,7 +448,6 @@ ccflags-y += -DGED_BUFFER_LOG_DISABLE
 endif
 endif
 
-
 ifeq ($(VER),eng)
 ccflags-y += -DGED_DEBUG_IOCTL_LOCK
 endif
@@ -480,7 +488,8 @@ ccflags-y += \
     -I$(srctree)/drivers/misc/mediatek/lcm/inc/ \
     -I$(srctree)/drivers/misc/mediatek/dfrc/ \
     -I$(srctree)/drivers/gpu/mediatek/gpufreq/include/ \
-    -I$(srctree)/drivers/misc/mediatek/sspm/
+    -I$(srctree)/drivers/misc/mediatek/sspm/ \
+    -I$(srctree)/drivers/gpu/drm/mediatek/
 
 obj-$(CONFIG_MTK_GPU_SUPPORT) += ged.o
 

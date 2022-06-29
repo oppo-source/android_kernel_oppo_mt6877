@@ -300,6 +300,10 @@ static int __ffs_ep0_queue_wait(struct ffs_data *ffs, char *data, size_t len)
 
 	ret = wait_for_completion_interruptible(&ffs->ep0req_completion);
 	if (unlikely(ret)) {
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		if (NULL == ffs->gadget)
+			return -EINTR;
+#endif
 		usb_ep_dequeue(ffs->gadget->ep0, req);
 		return -EINTR;
 	}
@@ -1418,18 +1422,30 @@ static struct dentry *ffs_sb_create_file(struct super_block *sb,
 	struct inode	*inode;
 
 	ENTER();
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	ffs_dev_lock();
+#endif
 	dentry = d_alloc_name(sb->s_root, name);
-	if (unlikely(!dentry))
+	if (unlikely(!dentry)) {
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		ffs_dev_unlock();
+#endif
 		return NULL;
+	}
 
 	inode = ffs_sb_make_inode(sb, data, fops, NULL, &ffs->file_perms);
 	if (unlikely(!inode)) {
 		dput(dentry);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+		ffs_dev_unlock();
+#endif
 		return NULL;
 	}
 
 	d_add(dentry, inode);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	ffs_dev_unlock();
+#endif
 	return dentry;
 }
 

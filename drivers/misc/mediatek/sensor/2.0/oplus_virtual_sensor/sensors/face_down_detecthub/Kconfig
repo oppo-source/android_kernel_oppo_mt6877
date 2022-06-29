@@ -1,0 +1,4 @@
+
+config OPLUS_FEATURE_FACE_DOWN_DETECT
+	bool "face_down_detecthub for MediaTek package"
+	default n

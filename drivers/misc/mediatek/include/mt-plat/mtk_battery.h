@@ -70,6 +70,15 @@ extern signed int battery_get_bat_temperature(void);
 extern signed int battery_get_ibus(void);
 extern signed int battery_get_vbus(void);
 extern signed int battery_get_bat_avg_current(void);
+int battery_type_check(void);
+bool is_fuelgauge_apply(void);
 
+#ifdef CONFIG_OPLUS_CHARGER_MTK6769
+/* legacy API */
+extern bool gauge_get_current(int *bat_current);
+extern signed int battery_meter_get_battery_current(void);
+extern bool battery_meter_get_battery_current_sign(void);
+extern signed int battery_meter_get_charger_voltage(void);
+#endif /*CONFIG_OPLUS_CHARGER_MTK6769*/
 
 #endif /* End of _FUEL_GAUGE_GM_30_H */

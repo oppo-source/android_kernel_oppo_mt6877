@@ -673,7 +673,7 @@ static irqreturn_t mtk_btcvsd_snd_irq_handler(int irq_id, void *dev)
 irq_handler_exit:
 	*bt->bt_reg_ctl |= BT_CVSD_TX_UNDERFLOW;
 	*bt->bt_reg_ctl &= ~BT_CVSD_CLEAR;
-	dev_warn(bt->dev, "%s(), irq_handler_exit, bt_reg_ctl = 0x%lx\n",
+	dev_warn(bt->dev, "%s(), irq_handler_exit, bt_reg_ctl = 0x%x\n",
 		 __func__, *bt->bt_reg_ctl);
 
 	return IRQ_HANDLED;
@@ -1408,7 +1408,15 @@ static int mtk_btcvsd_snd_probe(struct platform_device *pdev)
 			       IRQF_TRIGGER_NONE, "BTCVSD_ISR_Handle",
 			       (void *)btcvsd);
 	if (ret) {
-		dev_err(dev, "could not request_irq for BTCVSD_ISR_Handle\n");
+		dev_err(dev,
+			"could not request_irq %d for BTCVSD_ISR_Handle\n",
+			irq_id);
+		return ret;
+	}
+
+	ret = enable_irq_wake(irq_id);
+	if (ret < 0) {
+		dev_err(dev, "enable_irq_wake %d err: %d\n", irq_id, ret);
 		return ret;
 	}
 

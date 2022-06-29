@@ -32,15 +32,21 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/sched/rt.h>
 #include <linux/platform_data/nanohub.h>
+#include <linux/timekeeping.h>
 
 #include "main.h"
 #include "comms.h"
 #include "bl.h"
 #include "nanohub-mtk.h"
+#ifdef OPLUS_FEATURE_SENSOR
+#include <soc/oplus/system/kernel_fb.h>
+#endif /* OPLUS_FEATURE_SENSOR */
 
 #define WAKEUP_TIMEOUT_MS 1000
 
 static struct nanohub_data *g_nanohub_data_p;
+static s64 last_recovery_time;
+static u8 recovery_remains;
 
 int nanohub_wait_for_interrupt(struct nanohub_data *data)
 {
@@ -91,6 +97,11 @@ ssize_t nanohub_external_write(const char *buffer, size_t length)
 	struct nanohub_data *data = g_nanohub_data_p;
 	int ret;
 	u8 ret_data;
+#ifdef OPLUS_FEATURE_SENSOR
+	unsigned char *fb_str = "AP Auto Trigger wdt$$module@@scp";
+#endif
+	s64 now_time = 0;
+        pr_info("entering %s\n", __func__);
 
 	if (request_wakeup(data))
 		return -ERESTARTSYS;
@@ -99,16 +110,30 @@ ssize_t nanohub_external_write(const char *buffer, size_t length)
 		(data, CMD_COMMS_WRITE, buffer, length, &ret_data,
 		sizeof(ret_data), false,
 		10, 10) == sizeof(ret_data)) {
+		recovery_remains = 10;
 		if (ret_data)
 			ret = length;
 		else
 			ret = 0;
 	} else {
 		ret = ERROR_NACK;
+		now_time = ktime_get_boot_ns();
+		if (now_time - last_recovery_time > 2000000000
+			&& recovery_remains > 0) {
+			pr_err("write fails, reset_scp_remains:%u\n", recovery_remains);
+			recovery_remains--;
+			last_recovery_time = now_time;
+			scp_wdt_reset(0);
+#ifdef OPLUS_FEATURE_SENSOR
+			pr_err("[SCP] scp exception dump is done\n");
+			oplus_kevent_fb_str(FB_SENSOR,FB_SENSOR_ID_CRASH,fb_str);
+#endif  //OPLUS_FEATURE_SENSOR
+		}
 	}
 
 	release_wakeup(data);
 
+        pr_info("leaving %s, ret = %d\n", __func__, ret);
 	return ret;
 }
 
@@ -151,7 +176,7 @@ int nanohub_resume(struct nanohub_device *nano_dev)
 static int __init nanohub_init(void)
 {
 	int ret = 0;
-
+	recovery_remains = 10;
 #ifdef CONFIG_NANOHUB_I2C
 	if (ret == 0)
 		ret = nanohub_i2c_init();

@@ -1,0 +1,4 @@
+
+config OPLUS_FEATURE_SENSOR_MONITOR
+	bool "sensor_monitor for MediaTek package"
+	default y

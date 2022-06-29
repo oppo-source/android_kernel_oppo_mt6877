@@ -469,7 +469,9 @@ struct thermal_cooling_device *cdev, unsigned long state)
 		/* To trigger data abort to reset the system
 		 * for thermal protection.
 		 */
-		BUG();
+#ifndef OPLUS_FEATURE_CHG_BASIC
+		//BUG();
+#endif
 	}
 	return 0;
 }

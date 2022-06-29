@@ -30,4 +30,12 @@ obj-$(CONFIG_INPUT_APMPOWER)	+= apm-power.o
 obj-$(CONFIG_INPUT_KEYRESET)	+= keyreset.o
 obj-$(CONFIG_INPUT_KEYCOMBO)	+= keycombo.o
 
+#ifdef OPLUS_FEATURE_FINGERPRINT
+#obj-$(CONFIG_MTK_FINGERPRINT_SUPPORT)  += fingerprint/
+obj-$(CONFIG_OPLUS_FINGERPRINT)  += oplus_fp_drivers/
+#ifdef OPLUS_FEATURE_SECURITY_COMMON
+#Add for oplus_secure_common driver
+obj-$(CONFIG_OPLUS_FINGERPRINT)  += oplus_secure_drivers/
+#endif /*OPLUS_FEATURE_SECURITY_COMMON*/
+#endif /*OPLUS_FEATURE_FINGERPRINT*/
 obj-$(CONFIG_RMI4_CORE)		+= rmi4/

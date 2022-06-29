@@ -606,7 +606,6 @@ static void write_shutter(kal_uint32 shutter)
 {
 	kal_uint16 realtime_fps = 0;
 	#ifdef LONG_EXP
-	/*Yijun.Tan@camera.driver,20180116,add for slow shutter */
 	int longexposure_times = 0;
 	static int long_exposure_status;
 	#endif
@@ -970,6 +969,25 @@ static void imx586_set_lsc_reg_setting(
 
 	write_cmos_sensor_8(0x0B00, 0x00); /*lsc disable*/
 }
+
+static void check_stream_is_on(void)
+{
+	int i = 0;
+	UINT32 framecnt;
+	int timeout = (10000/imgsensor.current_fps)+1;
+
+	for (i = 0; i < timeout; i++) {
+
+		framecnt = read_cmos_sensor_8(0x0005);
+		if (framecnt != 0xFF) {
+			pr_debug("IMX586 stream is on, %d \\n", framecnt);
+			break;
+		}
+		pr_debug("IMX586 stream is not on %d \\n", framecnt);
+		mdelay(1);
+	}
+}
+
 /*************************************************************************
  * FUNCTION
  *	night_mode
@@ -998,12 +1016,15 @@ static kal_uint32 streaming_control(kal_bool enable)
 		write_cmos_sensor_8(0x3020, 0x00);/*Mode transition mode change*/
 		//write_cmos_sensor_8(0x3021, 0x01);/*complete mode*/
 		write_cmos_sensor_8(0x0100, 0X01);
+		check_stream_is_on();
 	} else
 		write_cmos_sensor_8(0x0100, 0x00);
 	return ERROR_NONE;
 }
 
 #if USE_BURST_MODE
+#define MULTI_WRITE 1
+
 #define I2C_BUFFER_LEN 255 /* trans# max is 255, each 3 bytes */
 static kal_uint16 imx586_table_write_cmos_sensor(kal_uint16 *para,
 						 kal_uint32 len)
@@ -1030,6 +1051,7 @@ static kal_uint16 imx586_table_write_cmos_sensor(kal_uint16 *para,
 		/* Write when remain buffer size is less than 3 bytes
 		 * or reach end of data
 		 */
+#if MULTI_WRITE
 		if ((I2C_BUFFER_LEN - tosend) < 3
 			|| IDX == len || addr != addr_last) {
 			iBurstWriteReg_multi(puSendCmd,
@@ -1039,6 +1061,11 @@ static kal_uint16 imx586_table_write_cmos_sensor(kal_uint16 *para,
 						imgsensor_info.i2c_speed);
 			tosend = 0;
 		}
+#else
+		iWriteRegI2C(puSendCmd, 3, imgsensor.i2c_write_id);
+		tosend = 0;
+#endif
+
 	}
 	return 0;
 }

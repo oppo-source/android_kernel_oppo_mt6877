@@ -48,9 +48,6 @@
 #include <linux/uaccess.h>
 #include <linux/mutex.h>
 
-#include <linux/io.h>
-
-
 #ifdef __KERNEL__
 	#include <linux/topology.h>
 	#include <mt-plat/mtk_chip.h>
@@ -130,7 +127,6 @@
 #define PTP3_ADCC_MEM_OFFSET (0x4000 * 7)
 #define PTP3_IGLRE_MEM_OFFSET (0x4000 * 8)
 
-#ifdef PTP3_STATUS_PROBE_DUMP
 static unsigned long long ptp3_reserve_memory_init(void)
 {
 #ifdef PICACHU_READY
@@ -156,7 +152,6 @@ static unsigned long long ptp3_reserve_memory_init(void)
 	return ptp3_mem_base_virt;
 #endif
 }
-#endif /* PTP3_STATUS_PROBE_DUMP */
 
 #endif /* CONFIG_OF_RESERVED_MEM */
 #endif /* CONFIG_FPGA_EARLY_PORTING */
@@ -183,74 +178,23 @@ unsigned int ptp3_smc_handle(
  * IPI between kernel and mcupm/cpu_eb
  ************************************************/
 #ifdef CONFIG_MTK_TINYSYS_MCUPM_SUPPORT
-//AP	0x0011BC00
-//03B4	PTP3_IPI_CMD
-//03B8	PTP3_IPI_CMD_ACK
-//03BC	PTP3_TX_DATA0
-//03C0	PTP3_TX_DATA1
-//03C4	PTP3_TX_DATA2
-//03C8	PTP3_RX_DATA0
-#define SYS_SRAM_BASE_ADDR              0x0011BC00
-#define PTP3_SYS_SRAM_SIZE              24
-#define PTP3_SYS_SRAM_BASE_OFFSET       0x3B4
-#define PTP3_IPI_CMD_OFFSET             0x0
-#define PTP3_IPI_CMD_ACK_OFFSET         0x4
-#define PTP3_TX_DATA0_OFFSET            0x8
-#define PTP3_TX_DATA1_OFFSET            0xC
-#define PTP3_TX_DATA2_OFFSET            0x10
-#define PTP3_RX_DATA0_OFFSET            0x14
-
-#define PTP3_POLLING_START              1
-#define PTP3_POLLING_DONE               0
-#define PTP3_IPI_CMD_ACK_SEND           1
-
-static phys_addr_t ptp3_sys_sram_base_virt;
-
 static DEFINE_MUTEX(ptp3_ipi_mutex);
 unsigned int ptp3_ipi_handle(struct ptp3_ipi_data *ptp3_data)
 {
-	int ret = -1;
-	int retry = 1000;
+	int ret;
 
 	mutex_lock(&ptp3_ipi_mutex);
-	if ((char *)ptp3_sys_sram_base_virt == NULL) {
-		ptp3_sys_sram_base_virt = (phys_addr_t)(uintptr_t)ioremap_wc(
-			SYS_SRAM_BASE_ADDR + PTP3_SYS_SRAM_BASE_OFFSET,
-			PTP3_SYS_SRAM_SIZE);
-	}
 
-	writel(ptp3_data->cmd,
-		(void __iomem *)(ptp3_sys_sram_base_virt + PTP3_TX_DATA0_OFFSET));
-	writel(ptp3_data->u.ptp3.cfg,
-		(void __iomem *)(ptp3_sys_sram_base_virt + PTP3_TX_DATA1_OFFSET));
-	writel(ptp3_data->u.ptp3.val,
-		(void __iomem *)(ptp3_sys_sram_base_virt + PTP3_TX_DATA2_OFFSET));
-	writel(PTP3_POLLING_START,
-		(void __iomem *)(ptp3_sys_sram_base_virt + PTP3_IPI_CMD_OFFSET));
-	while (retry > 0) {
-		msleep(50);
-		ret = readl((void __iomem *)(ptp3_sys_sram_base_virt + PTP3_IPI_CMD_ACK_OFFSET));
-		if (ret == PTP3_IPI_CMD_ACK_SEND)
-			break;
+	ret = mtk_ipi_send_compl(&mcupm_ipidev, CH_S_PLATFORM,
+		IPI_SEND_WAIT,
+		ptp3_data,
+		sizeof(struct ptp3_ipi_data) / PTP3_SLOT_NUM,
+		2000);
 
-		retry--;
-	}
+	if (ret != 0)
+		ptp3_err("send init cmd(%d) error ret:%d\n",
+			ptp3_data->cmd, ret);
 
-	/* polling done clear CMD_ACK */
-	writel(PTP3_POLLING_DONE,
-		(void __iomem *)(ptp3_sys_sram_base_virt + PTP3_IPI_CMD_ACK_OFFSET));
-	if (ret != PTP3_IPI_CMD_ACK_SEND)
-		ret = -1;
-	else
-		ret = readl((void __iomem *)(ptp3_sys_sram_base_virt + PTP3_RX_DATA0_OFFSET));
-
-	/* reset all */
-	writel(0, (void __iomem *)(ptp3_sys_sram_base_virt + PTP3_IPI_CMD_OFFSET));
-	writel(0, (void __iomem *)(ptp3_sys_sram_base_virt + PTP3_IPI_CMD_ACK_OFFSET));
-	writel(0, (void __iomem *)(ptp3_sys_sram_base_virt + PTP3_TX_DATA0_OFFSET));
-	writel(0, (void __iomem *)(ptp3_sys_sram_base_virt + PTP3_TX_DATA1_OFFSET));
-	writel(0, (void __iomem *)(ptp3_sys_sram_base_virt + PTP3_TX_DATA2_OFFSET));
-	writel(0, (void __iomem *)(ptp3_sys_sram_base_virt + PTP3_RX_DATA0_OFFSET));
 	mutex_unlock(&ptp3_ipi_mutex);
 	return ret;
 }
@@ -301,8 +245,6 @@ static int ptp3_probe(struct platform_device *pdev)
 
 #ifndef CONFIG_FPGA_EARLY_PORTING
 #ifdef CONFIG_OF_RESERVED_MEM
-
-#ifdef PTP3_STATUS_PROBE_DUMP
 	/* GAT log use */
 	unsigned long long ptp3_mem_size = PTP3_MEM_SIZE;
 	unsigned long long ptp3_mem_base_virt;
@@ -358,8 +300,6 @@ static int ptp3_probe(struct platform_device *pdev)
 			ptp3_mem_size);
 	} else
 		ptp3_err("ptp3_mem_base_virt is NULL\n");
-#endif /* PTP3_STATUS_PROBE_DUMP */
-
 #endif /* CONFIG_OF_RESERVED_MEM */
 #endif /* CONFIG_FPGA_EARLY_PORTING */
 
@@ -379,11 +319,29 @@ static int ptp3_probe(struct platform_device *pdev)
 
 static int ptp3_suspend(struct platform_device *pdev, pm_message_t state)
 {
+	adcc_suspend(pdev, state);
+	fll_suspend(pdev, state);
+	ctt_suspend(pdev, state);
+	drcc_suspend(pdev, state);
+	brisket2_suspend(pdev, state);
+	cinst_suspend(pdev, state);
+	pdp_suspend(pdev, state);
+	dt_suspend(pdev, state);
+	iglre_suspend(pdev, state);
 	return 0;
 }
 
 static int ptp3_resume(struct platform_device *pdev)
 {
+	adcc_resume(pdev);
+	fll_resume(pdev);
+	ctt_resume(pdev);
+	drcc_resume(pdev);
+	brisket2_resume(pdev);
+	cinst_resume(pdev);
+	pdp_resume(pdev);
+	dt_resume(pdev);
+	iglre_resume(pdev);
 	return 0;
 }
 

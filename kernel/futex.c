@@ -73,6 +73,11 @@
 
 #include "locking/rtmutex_common.h"
 
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+#include <linux/sched_assist/sched_assist_futex.h>
+#include <linux/sched_assist/sched_assist_common.h>
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+
 /*
  * READ this before attempting to hack on futexes!
  *
@@ -249,6 +254,10 @@ struct futex_q {
 	struct rt_mutex_waiter *rt_waiter;
 	union futex_key *requeue_pi_key;
 	u32 bitset;
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	struct task_struct *wait_for_task;
+	bool ux_blocked;
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 } __randomize_layout;
 
 static const struct futex_q futex_q_init = {
@@ -1708,6 +1717,13 @@ futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 			if (!(this->bitset & bitset))
 				continue;
 
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+			if (sysctl_sched_assist_enabled) {
+				if (this->ux_blocked) {
+					futex_unset_inherit_ux_refs(this->wait_for_task, 1);
+				}
+			}
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 			mark_wake_futex(&wake_q, this);
 			if (++ret >= nr_wake)
 				break;
@@ -2361,6 +2377,11 @@ static inline void __queue_me(struct futex_q *q, struct futex_hash_bucket *hb)
 	 * the others are woken last, in FIFO order.
 	 */
 	prio = min(current->normal_prio, MAX_RT_PRIO);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST)
+	if (sysctl_sched_assist_enabled && test_task_ux(current)) {
+		prio = min(current->normal_prio, MAX_RT_PRIO - 1);
+	}
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 	plist_node_init(&q->list, prio);
 #ifdef CONFIG_MTK_TASK_TURBO
@@ -2710,6 +2731,15 @@ static void futex_wait_queue_me(struct futex_hash_bucket *hb, struct futex_q *q,
 	 * access to the hash list and forcing another memory barrier.
 	 */
 	set_current_state(TASK_INTERRUPTIBLE);
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	if (sysctl_sched_assist_enabled) {
+		if (!timeout) {
+			if (q->wait_for_task != NULL && futex_set_inherit_ux_refs_v2(q->wait_for_task, current)) {
+				q->ux_blocked = true;
+			}
+		}
+	}
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 	queue_me(q, hb);
 
 	/* Arm the timer */
@@ -2726,8 +2756,19 @@ static void futex_wait_queue_me(struct futex_hash_bucket *hb, struct futex_q *q,
 		 * flagged for rescheduling. Only call schedule if there
 		 * is no timeout, or if it has yet to expire.
 		 */
-		if (!timeout || timeout->task)
+		if (!timeout || timeout->task){
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_JANK_INFO
+			current->in_futex = 1;
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
 			freezable_schedule();
+#ifdef OPLUS_FEATURE_HEALTHINFO
+#ifdef CONFIG_OPLUS_JANK_INFO
+			current->in_futex = 0;
+#endif
+#endif /* OPLUS_FEATURE_HEALTHINFO */
+		}
 	}
 	__set_current_state(TASK_RUNNING);
 }
@@ -2808,8 +2849,13 @@ out:
 	return ret;
 }
 
+#ifndef OPLUS_FEATURE_SCHED_ASSIST
 static int futex_wait(u32 __user *uaddr, unsigned int flags, u32 val,
 		      ktime_t *abs_time, u32 bitset)
+#else /* OPLUS_FEATURE_SCHED_ASSIST */
+static int futex_wait(u32 __user *uaddr, unsigned int flags, u32 val,
+		ktime_t *abs_time, u32 bitset, u32 owner_tid)
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 {
 	struct hrtimer_sleeper timeout, *to = NULL;
 	struct restart_block *restart;
@@ -2820,6 +2866,18 @@ static int futex_wait(u32 __user *uaddr, unsigned int flags, u32 val,
 	if (!bitset)
 		return -EINVAL;
 	q.bitset = bitset;
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	if (sysctl_sched_assist_enabled && (bitset == FUTEX_BITSET_MATCH_ANY) && test_task_ux(current)) {
+		struct task_struct* owner_task = get_futex_owner_by_pid_v2(owner_tid);
+		if (owner_task != NULL) {
+			if ((current->tgid == owner_task->tgid) || (flags & FLAGS_SHARED)) {
+				q.wait_for_task = owner_task;
+			} else {
+				put_task_struct(owner_task);
+			}
+		}
+	}
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 	if (abs_time) {
 		to = &timeout;
@@ -2871,6 +2929,9 @@ retry:
 	restart->futex.time = *abs_time;
 	restart->futex.bitset = bitset;
 	restart->futex.flags = flags | FLAGS_HAS_TIMEOUT;
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	restart->futex.uaddr2 = (u32*)(long)owner_tid;
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 	ret = -ERESTART_RESTARTBLOCK;
 
@@ -2879,6 +2940,10 @@ out:
 		hrtimer_cancel(&to->timer);
 		destroy_hrtimer_on_stack(&to->timer);
 	}
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	if (q.wait_for_task)
+		put_task_struct(q.wait_for_task);
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 	return ret;
 }
 
@@ -2894,8 +2959,13 @@ static long futex_wait_restart(struct restart_block *restart)
 	}
 	restart->fn = do_no_restart_syscall;
 
+#ifndef OPLUS_FEATURE_SCHED_ASSIST
 	return (long)futex_wait(uaddr, restart->futex.flags,
 				restart->futex.val, tp, restart->futex.bitset);
+#else /* OPLUS_FEATURE_SCHED_ASSIST */
+	return (long)futex_wait(uaddr, restart->futex.flags,
+				restart->futex.val, tp, restart->futex.bitset, (u32)(restart->futex.uaddr2));
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 }
 
 
@@ -3925,7 +3995,11 @@ long do_futex(u32 __user *uaddr, int op, u32 val, ktime_t *timeout,
 	case FUTEX_WAIT:
 		val3 = FUTEX_BITSET_MATCH_ANY;
 	case FUTEX_WAIT_BITSET:
+#ifndef OPLUS_FEATURE_SCHED_ASSIST
 		return futex_wait(uaddr, flags, val, timeout, val3);
+#else /* OPLUS_FEATURE_SCHED_ASSIST */
+		return futex_wait(uaddr, flags, val, timeout, val3, (u32)uaddr2);
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 	case FUTEX_WAKE:
 		val3 = FUTEX_BITSET_MATCH_ANY;
 	case FUTEX_WAKE_BITSET:

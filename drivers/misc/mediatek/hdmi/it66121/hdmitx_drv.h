@@ -381,7 +381,6 @@ struct _HDMITXDEV {
 	/* 2009/11/11 added by jj_tseng@ite.com.tw */
 	unsigned char bSPDIF_OUT;
 	unsigned char TxEMEMStatus : 1;
-	/* ~jau-chih.tseng@ite.com.tw 2009/11/11 */
 };
 #define HDMITXDEV struct _HDMITXDEV
 

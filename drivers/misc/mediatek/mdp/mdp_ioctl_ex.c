@@ -257,7 +257,7 @@ static s32 mdp_process_read_request(struct mdp_read_readback *req_user)
 		CMDQ_SYSTRACE_BEGIN("%s_copy_to_user_%u\n", __func__, count);
 
 		cmdqCoreReadWriteAddressBatch(addrs, count, values);
-		cmdq_driver_dump_readback(addrs, count, values);
+		cmdq_driver_dump_readback(ids, addrs, count, values);
 
 		/* copy value to user */
 		if (copy_to_user(values_user, values, count * sizeof(u32))) {
@@ -882,7 +882,7 @@ s32 mdp_ioctl_alloc_readback_slots(void *fp, unsigned long param)
 	dma_addr_t paStart = 0;
 	s32 status;
 	u32 free_slot, free_slot_group, alloc_slot_index;
-	u64 exec_cost = sched_clock(), alloc;
+	u64 exec_cost = sched_clock();
 
 	if (copy_from_user(&rb_req, (void *)param, sizeof(rb_req))) {
 		CMDQ_ERR("%s copy_from_user failed\n", __func__);
@@ -900,7 +900,6 @@ s32 mdp_ioctl_alloc_readback_slots(void *fp, unsigned long param)
 		CMDQ_ERR("%s alloc write address failed\n", __func__);
 		return status;
 	}
-	alloc = div_u64(sched_clock() - exec_cost, 1000);
 
 	mutex_lock(&rb_slot_list_mutex);
 	free_slot_group = ffz(alloc_slot_group);
@@ -943,8 +942,8 @@ s32 mdp_ioctl_alloc_readback_slots(void *fp, unsigned long param)
 
 	exec_cost = div_u64(sched_clock() - exec_cost, 1000);
 	if (exec_cost > 10000)
-		CMDQ_LOG("[warn]%s cost:%lluus (%lluus)\n",
-			__func__, exec_cost, alloc);
+		CMDQ_LOG("[warn]%s cost:%lluus\n",
+			__func__, exec_cost);
 
 	return 0;
 }
@@ -1040,6 +1039,12 @@ s32 mdp_ioctl_simulate(unsigned long param)
 
 	if (copy_from_user(&user_job, (void *)param, sizeof(user_job))) {
 		CMDQ_ERR("%s copy mdp_simulate from user fail\n", __func__);
+		status = -EFAULT;
+		goto done;
+	}
+
+	if (user_job.command_size > CMDQ_MAX_SIMULATE_COMMAND_SIZE) {
+		CMDQ_ERR("%s simulate command is too much\n", __func__);
 		status = -EFAULT;
 		goto done;
 	}

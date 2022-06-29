@@ -37,6 +37,10 @@
 #include "sensor_list.h"
 #include "mtk_nanohub_ipi.h"
 
+#ifdef OPLUS_FEATURE_SENSOR_ALGORITHM
+#include "../oplus_sensor_devinfo/sensor_devinfo.h"
+#endif
+
 /* ALGIN TO SCP SENSOR_IPI_SIZE AT FILE CONTEXTHUB_FW.H, ALGIN
  * TO SCP_SENSOR_HUB_DATA UNION, ALGIN TO STRUCT DATA_UNIT_T
  * SIZEOF(STRUCT DATA_UNIT_T) = SCP_SENSOR_HUB_DATA = SENSOR_IPI_SIZE
@@ -91,10 +95,13 @@ struct mtk_nanohub_device {
 	int32_t gyro_config_data[12];
 	int32_t mag_config_data[9];
 	int32_t light_config_data[1];
-	int32_t proximity_config_data[2];
+	int32_t proximity_config_data[3];
 	int32_t pressure_config_data[2];
 	int32_t sar_config_data[4];
 	int32_t ois_config_data[2];
+#ifdef OPLUS_FEATURE_SENSOR
+	int32_t cct_config_data[6];
+#endif /*OPLUS_FEATURE_SENSOR*/
 };
 
 static uint8_t rtc_compensation_suspend;
@@ -119,6 +126,11 @@ static int mtk_nanohub_send_timestamp_to_hub(void);
 static int mtk_nanohub_server_dispatch_data(uint32_t *currWp);
 static int mtk_nanohub_report_to_manager(struct data_unit_t *data);
 static int mtk_nanohub_create_manager(void);
+
+#ifdef OPLUS_FEATURE_SENSOR_ALGORITHM
+extern void oplus_init_sensor_state(struct SensorState *mSensorState);
+extern void virtual_sensor_report_data(struct data_unit_t *data,int handle);
+#endif /*OPLUS_FEATURE_SENSOR_ALGORITHM*/
 
 enum scp_ipi_status __attribute__((weak)) scp_ipi_registration(enum ipi_id id,
 	void (*ipi_handler)(int id, void *data, unsigned int len),
@@ -331,6 +343,15 @@ static void mtk_nanohub_common_cmd(union SCP_SENSOR_HUB_DATA *rsp,
 	mtk_nanohub_ipi_complete((unsigned char *)rsp, rx_len);
 }
 
+//#ifdef OPLUS_FEATURE_SENSOR
+static void
+SCP_sensorHub_set_oplus_cmd(union SCP_SENSOR_HUB_DATA *rsp,
+					int rx_len)
+{
+	mtk_nanohub_ipi_complete((unsigned char *)rsp, rx_len);
+}
+//#endif
+
 static void mtk_nanohub_moving_average(union SCP_SENSOR_HUB_DATA *rsp)
 {
 	uint64_t ap_now_time = 0, arch_counter = 0;
@@ -422,13 +443,23 @@ static void mtk_nanohub_ipi_handler(int id,
 		return;
 	}
 	/*pr_err("sensorType:%d, action=%d event:%d len:%d\n",
-	 * rsp->rsp.sensorType, rsp->rsp.action, rsp->notify_rsp.event, len);
+	 *rsp->rsp.sensorType, rsp->rsp.action, rsp->notify_rsp.event, len);
 	 */
-	cmd = mtk_nanohub_find_cmd(rsp->rsp.action);
+	//#ifndef OPLUS_FEATURE_SENSOR
+	/*cmd = mtk_nanohub_find_cmd(rsp->rsp.action);
 	if (cmd != NULL)
 		cmd->handler(rsp, len);
 	else
-		pr_err("cannot find cmd!\n");
+		pr_err("cannot find cmd!\n");*/
+	//#else
+	cmd = mtk_nanohub_find_cmd(rsp->rsp.action);
+	if (cmd != NULL)
+		cmd->handler(rsp, len);
+	else {
+		pr_err("cannot find cmd! try to find oplus cmd\n");
+		SCP_sensorHub_set_oplus_cmd(rsp,len);
+	}
+	//#endif
 }
 
 static void mtk_nanohub_get_sensor_info(void)
@@ -675,7 +706,44 @@ static void mtk_nanohub_init_sensor_info(void)
 	p->gain = 1000000;
 	strlcpy(p->name, "ois", sizeof(p->name));
 	strlcpy(p->vendor, "mtk", sizeof(p->vendor));
+#ifdef OPLUS_FEATURE_SENSOR
+	p = &sensor_state[SENSOR_TYPE_RAW_MAG];
+	p->sensorType = SENSOR_TYPE_RAW_MAG;
+	p->gain = 1;
+	p->rate = SENSOR_RATE_ONCHANGE;
+	strlcpy(p->name, "raw_mag", sizeof(p->name));
+	strlcpy(p->vendor, "oplus", sizeof(p->vendor));
 
+	p = &sensor_state[SENSOR_TYPE_REAR_ALS];
+	p->sensorType = SENSOR_TYPE_REAR_ALS;
+	p->gain = 1;
+	p->rate = SENSOR_RATE_ONCHANGE;
+	strlcpy(p->name, "rear_als", sizeof(p->name));
+	strlcpy(p->vendor, "oplus", sizeof(p->vendor));
+
+	p = &sensor_state[SENSOR_TYPE_CCT];
+	p->sensorType = SENSOR_TYPE_CCT;
+	p->gain = 1;
+	p->rate = SENSOR_RATE_ONCHANGE;
+	strlcpy(p->name, "cct", sizeof(p->name));
+	strlcpy(p->vendor, "oplus", sizeof(p->vendor));
+
+	p = &sensor_state[SENSOR_TYPE_FLICKER];
+	p->sensorType = SENSOR_TYPE_FLICKER;
+	p->gain = 1;
+	p->rate = SENSOR_RATE_ONCHANGE;
+	strlcpy(p->name, "flicker", sizeof(p->name));
+	strlcpy(p->vendor, "oplus", sizeof(p->vendor));
+	p = &sensor_state[SENSOR_TYPE_AI_SHUTTER];
+	p->sensorType = SENSOR_TYPE_AI_SHUTTER;
+	p->gain = 1;
+	p->rate = SENSOR_RATE_ONCHANGE;
+	strlcpy(p->name, "ai_shutter", sizeof(p->name));
+	strlcpy(p->vendor, "oplus", sizeof(p->vendor));
+#endif /*OPLUS_FEATURE_SENSOR*/
+	#ifdef OPLUS_FEATURE_SENSOR_ALGORITHM
+	oplus_init_sensor_state(sensor_state);
+	#endif
 }
 
 static void init_sensor_config_cmd(struct ConfigCmd *cmd,
@@ -1561,6 +1629,125 @@ int mtk_nanohub_set_cmd_to_hub(uint8_t sensor_id,
 			return -1;
 		}
 		break;
+#ifdef OPLUS_FEATURE_SENSOR
+	case ID_REAR_ALS:
+		req.set_cust_req.sensorType = ID_REAR_ALS;
+		req.set_cust_req.action = SENSOR_HUB_SET_CUST;
+		switch (action) {
+		case CUST_ACTION_GET_RAW_DATA:
+			req.set_cust_req.getRawData.action =
+				CUST_ACTION_GET_RAW_DATA;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getRawData);
+			err = mtk_nanohub_req_send(&req);
+			if (err == 0) {
+				if ((req.set_cust_rsp.action !=
+					SENSOR_HUB_SET_CUST)
+					|| (req.set_cust_rsp.errCode != 0)) {
+					pr_err("get_raw fail!\n");
+					return -1;
+				}
+				if (req.set_cust_rsp.getRawData.action !=
+					CUST_ACTION_GET_RAW_DATA) {
+					pr_err("get_raw fail!\n");
+					return -1;
+				}
+				pGetRawData = &req.set_cust_rsp.getRawData;
+				*((uint8_t *) data) =
+					pGetRawData->uint8_data[0];
+			} else {
+				pr_err("get_raw failed!\n");
+			}
+			return 0;
+		case CUST_ACTION_GET_SENSOR_INFO:
+			req.set_cust_req.getInfo.action =
+				CUST_ACTION_GET_SENSOR_INFO;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getInfo);
+			break;
+		default:
+			return -1;
+		}
+		break;
+	case ID_CCT:
+		req.set_cust_req.sensorType = ID_CCT;
+		req.set_cust_req.action = SENSOR_HUB_SET_CUST;
+		switch (action) {
+		case CUST_ACTION_GET_RAW_DATA:
+			req.set_cust_req.getRawData.action =
+				CUST_ACTION_GET_RAW_DATA;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getRawData);
+			err = mtk_nanohub_req_send(&req);
+			if (err == 0) {
+				if ((req.set_cust_rsp.action !=
+					SENSOR_HUB_SET_CUST)
+					|| (req.set_cust_rsp.errCode != 0)) {
+					pr_err("get_raw fail!\n");
+					return -1;
+				}
+				if (req.set_cust_rsp.getRawData.action !=
+					CUST_ACTION_GET_RAW_DATA) {
+					pr_err("get_raw fail!\n");
+					return -1;
+				}
+				pGetRawData = &req.set_cust_rsp.getRawData;
+				*((uint8_t *) data) =
+					pGetRawData->uint8_data[0];
+			} else {
+				pr_err("get_raw failed!\n");
+			}
+			return 0;
+		case CUST_ACTION_GET_SENSOR_INFO:
+			req.set_cust_req.getInfo.action =
+				CUST_ACTION_GET_SENSOR_INFO;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getInfo);
+			break;
+		default:
+			return -1;
+		}
+		break;
+	case ID_FLICKER:
+		req.set_cust_req.sensorType = ID_FLICKER;
+		req.set_cust_req.action = SENSOR_HUB_SET_CUST;
+		switch (action) {
+		case CUST_ACTION_GET_RAW_DATA:
+			req.set_cust_req.getRawData.action =
+				CUST_ACTION_GET_RAW_DATA;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getRawData);
+			err = mtk_nanohub_req_send(&req);
+			if (err == 0) {
+				if ((req.set_cust_rsp.action !=
+					SENSOR_HUB_SET_CUST)
+					|| (req.set_cust_rsp.errCode != 0)) {
+					pr_err("get_raw fail!\n");
+					return -1;
+				}
+				if (req.set_cust_rsp.getRawData.action !=
+					CUST_ACTION_GET_RAW_DATA) {
+					pr_err("get_raw fail!\n");
+					return -1;
+				}
+				pGetRawData = &req.set_cust_rsp.getRawData;
+				*((uint8_t *) data) =
+					pGetRawData->uint8_data[0];
+			} else {
+				pr_err("get_raw failed!\n");
+			}
+			return 0;
+		case CUST_ACTION_GET_SENSOR_INFO:
+			req.set_cust_req.getInfo.action =
+				CUST_ACTION_GET_SENSOR_INFO;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getInfo);
+			break;
+		default:
+			return -1;
+		}
+		break;
+#endif
 	case ID_OIS:
 		req.set_cust_req.sensorType = ID_OIS;
 		req.set_cust_req.action = SENSOR_HUB_SET_CUST;
@@ -1743,7 +1930,11 @@ static void mtk_nanohub_restoring_config(void)
 		spin_lock(&config_data_lock);
 		memcpy(data, device->proximity_config_data, length);
 		spin_unlock(&config_data_lock);
-		mtk_nanohub_cfg_to_hub(ID_PROXIMITY, data, length);
+		#ifdef OPLUS_FEATURE_SENSOR_ALGORITHM
+		if (!is_support_new_arch_func()) {
+		    mtk_nanohub_cfg_to_hub(ID_PROXIMITY, data, length);
+		}
+		#endif
 		vfree(data);
 	}
 
@@ -1776,6 +1967,18 @@ static void mtk_nanohub_restoring_config(void)
 		mtk_nanohub_cfg_to_hub(ID_OIS, data, length);
 		vfree(data);
 	}
+
+#ifdef OPLUS_FEATURE_SENSOR
+	length = sizeof(device->cct_config_data);
+	data = vzalloc(length);
+	if (data) {
+		spin_lock(&config_data_lock);
+		memcpy(data, device->cct_config_data, length);
+		spin_unlock(&config_data_lock);
+		mtk_nanohub_cfg_to_hub(ID_CCT, data, length);
+		vfree(data);
+	}
+#endif /*OPLUS_FEATURE_SENSOR*/
 }
 
 static void mtk_nanohub_start_timesync(void)
@@ -1977,6 +2180,14 @@ static int mtk_nanohub_config(struct hf_device *hfdev,
 		memcpy(device->ois_config_data, data, length);
 		spin_unlock(&config_data_lock);
 		break;
+#ifdef OPLUS_FEATURE_SENSOR
+	case ID_CCT:
+		length = sizeof(device->cct_config_data);
+		spin_lock(&config_data_lock);
+		memcpy(device->cct_config_data, data, length);
+		spin_unlock(&config_data_lock);
+		break;
+#endif /*OPLUS_FEATURE_SENSOR*/
 	}
 	if (!length) {
 		pr_err("%s type(%d) length fail\n", __func__, sensor_type);
@@ -2089,6 +2300,17 @@ static int mtk_nanohub_custom_cmd(struct hf_device *hfdev,
 					sizeof(device->ois_config_data));
 			spin_unlock(&config_data_lock);
 			break;
+#ifdef OPLUS_FEATURE_SENSOR
+		case SENSOR_TYPE_CCT:
+			if (sizeof(cust_cmd->data) <
+					sizeof(device->cct_config_data))
+				return -EINVAL;
+			spin_lock(&config_data_lock);
+			memcpy(cust_cmd->data, device->cct_config_data,
+					sizeof(device->cct_config_data));
+			spin_unlock(&config_data_lock);
+			break;
+#endif /*OPLUS_FEATURE_SENSOR*/
 		default:
 			pr_notice("SensorType:%d not support CUST_CMD_CALI!\n",
 				sensor_type);
@@ -2109,8 +2331,14 @@ static int mtk_nanohub_report_to_manager(struct data_unit_t *data)
 
 	if (!manager)
 		return 0;
-
 	memset(&event, 0, sizeof(struct hf_manager_event));
+	#ifdef OPLUS_FEATURE_SENSOR_ALGORITHM
+	if(data->sensor_type >= ID_OPLUS_VIRTUAL_SENSOR_START &&
+		data->sensor_type < ID_VIRTUAL_SENSOR_MAX) {
+		virtual_sensor_report_data(data,data->sensor_type);
+		return 0;
+	}
+	#endif /*OPLUS_FEATURE_SENSOR_ALGORITHM*/
 	if (data->flush_action == DATA_ACTION) {
 		switch (data->sensor_type) {
 		case ID_ACCELEROMETER:
@@ -2244,6 +2472,10 @@ static int mtk_nanohub_report_to_manager(struct data_unit_t *data)
 			event.word[3] = data->data[3];
 			event.word[4] = data->data[4];
 			event.word[5] = data->data[5];
+#ifdef OPLUS_FEATURE_SENSOR
+			event.word[6] = data->data[6];
+			event.word[7] = data->data[7];
+#endif /*OPLUS_FEATURE_SENSOR*/
 			break;
 		}
 	} else if (data->flush_action == FLUSH_ACTION) {

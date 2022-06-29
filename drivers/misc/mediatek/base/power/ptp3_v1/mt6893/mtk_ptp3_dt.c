@@ -110,7 +110,6 @@ static unsigned int dt_state_pinctl;
 #ifndef CONFIG_FPGA_EARLY_PORTING
 #ifdef CONFIG_OF_RESERVED_MEM
 
-#ifdef PTP3_STATUS_PROBE_DUMP
 static char *dt_buf;
 static unsigned long long dt_mem_size;
 void dt_save_memory_info(char *buf, unsigned long long ptp3_mem_size)
@@ -159,7 +158,7 @@ int dt_reserve_memory_dump(char *buf,  unsigned long long ptp3_mem_size,
 				(unsigned long long)ptp3_mem_size - str_len,
 				"[DT]DT_PINCTL_EN : %d\n",
 				reg_value);
-		for (dt_n = DT_THR_START_BIT ; dt_n <= DT_THR_END_BIT ; dt_n++) {
+		for (dt_n = DT_THR_START_BIT ; dt_n >= DT_THR_END_BIT ; dt_n++) {
 			reg_value = mt_secure_call(MTK_SIP_KERNEL_PTP3_CONTROL,
 						PTP3_FEATURE_DT,
 						DT_RW_READ,
@@ -196,7 +195,6 @@ int dt_reserve_memory_dump(char *buf,  unsigned long long ptp3_mem_size,
 
 	return 0;
 }
-#endif
 
 #endif
 #endif
@@ -325,7 +323,12 @@ static int dt_dump_proc_show(struct seq_file *m, void *v)
 			break;
 	}
 		}
-
+#if 0
+	for (dt_n = DT_NUM ; dt_n < DT_DEBUG_BIT ; dt_n++) {
+		status = ptp3_smc_handle(PTP3_FEATURE_DT, DT_RW_READ, 0, dt_n);
+		seq_printf(m, "DT Debug Bits%d: %d\n", dt_n, status);
+	}
+#endif
 	return 0;
 }
 static int dt_cfg_proc_show(struct seq_file *m, void *v)
@@ -361,6 +364,8 @@ static int dt_cfg_proc_show(struct seq_file *m, void *v)
 	}
 		if (dt_cfg_flag == 1)
 			seq_printf(m, "%08x\n", dt_cfg);
+		else
+			seq_puts(m, "XXXX0000\n");
 	return 0;
 }
 
@@ -527,27 +532,41 @@ int dt_probe(struct platform_device *pdev)
 				(dt_state_pinctl >> dt_n) & 0x1, dt_n);
 	}
 #endif /* CONFIG_OF */
-
 #ifdef CONFIG_OF_RESERVED_MEM
-#ifdef PTP3_STATUS_PROBE_DUMP
 	/* dump reg status into PICACHU dram for DB */
 	if (dt_buf != NULL) {
 		dt_reserve_memory_dump(dt_buf+0x1000, dt_mem_size,
 			DT_TRIGGER_STAGE_PROBE);
 	}
-#endif /* PTP3_STATUS_PROBE_DUMP */
 #endif /* CONFIG_OF_RESERVED_MEM */
-
 #endif /* CONFIG_FPGA_EARLY_PORTING */
 	return 0;
 }
 int dt_suspend(struct platform_device *pdev, pm_message_t state)
 {
+#ifndef CONFIG_FPGA_EARLY_PORTING
+#ifdef CONFIG_OF_RESERVED_MEM
+	/* dump reg status into PICACHU dram for DB */
+	if (dt_buf != NULL) {
+		dt_reserve_memory_dump(dt_buf+0x1000, dt_mem_size,
+			DT_TRIGGER_STAGE_SUSPEND);
+	}
+#endif /* CONFIG_OF_RESERVED_MEM */
+#endif /* CONFIG_FPGA_EARLY_PORTING */
 	return 0;
 }
 
 int dt_resume(struct platform_device *pdev)
 {
+#ifndef CONFIG_FPGA_EARLY_PORTING
+#ifdef CONFIG_OF_RESERVED_MEM
+	/* dump reg status into PICACHU dram for DB */
+	if (dt_buf != NULL) {
+		dt_reserve_memory_dump(dt_buf+0x2000, dt_mem_size,
+			DT_TRIGGER_STAGE_RESUME);
+	}
+#endif /* CONFIG_OF_RESERVED_MEM */
+#endif /* CONFIG_FPGA_EARLY_PORTING */
 	return 0;
 }
 

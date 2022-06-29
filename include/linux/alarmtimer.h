@@ -44,6 +44,9 @@ struct alarm {
 	enum alarmtimer_restart	(*function)(struct alarm *, ktime_t now);
 	enum alarmtimer_type	type;
 	int			state;
+#ifdef VENDOR_EDIT
+	char		comm[TASK_COMM_LEN];
+#endif /* VENDOR_EDIT */
 	void			*data;
 };
 

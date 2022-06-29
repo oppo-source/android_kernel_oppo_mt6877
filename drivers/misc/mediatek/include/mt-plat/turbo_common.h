@@ -19,6 +19,9 @@ enum {
 	SUB_FEAT_BINDER		= 1U << 1,
 	SUB_FEAT_SCHED		= 1U << 2,
 	SUB_FEAT_FLAVOR_BIGCORE = 1U << 3,
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	SUB_FEAT_NO_RENICE      = 1U << 4,
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 };
 
 extern void init_turbo_attr(struct task_struct *p,

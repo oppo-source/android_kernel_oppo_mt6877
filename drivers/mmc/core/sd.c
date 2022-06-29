@@ -29,6 +29,10 @@
 #include "sd.h"
 #include "sd_ops.h"
 
+#ifdef OPLUS_FEATURE_SDCARD_INFO
+#include "../host/sdInfo/sdinfo.h"
+#endif
+
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
 	0,		0,		0,		0
@@ -1214,6 +1218,10 @@ static int _mmc_sd_resume(struct mmc_host *host)
 
 out:
 	mmc_release_host(host);
+#ifdef OPLUS_FEATURE_SDCARD_INFO
+	if (err)
+		sdinfo.runtime_resume_error_count += 1;
+#endif
 	return err;
 }
 
@@ -1290,6 +1298,13 @@ int mmc_attach_sd(struct mmc_host *host)
 
 	WARN_ON(!host->claimed);
 
+#ifdef OPLUS_FEATURE_STORAGE
+	if (!host->detect_change_retry) {
+		pr_err("%s have init error 5 times\n", __func__);
+		return -ETIMEDOUT;
+	}
+#endif
+
 	err = mmc_send_app_op_cond(host, 0, &ocr);
 	if (err)
 		return err;
@@ -1329,7 +1344,14 @@ int mmc_attach_sd(struct mmc_host *host)
 	 * Detect and init the card.
 	 */
 #ifdef CONFIG_MMC_PARANOID_SD_INIT
+#ifndef OPLUS_FEATURE_STORAGE
 	retries = 5;
+#else
+	if (host->detect_change_retry < 5)
+		retries = 1;
+	else
+		retries = 5;
+#endif
 	while (retries) {
 		err = mmc_sd_init_card(host, rocr, NULL);
 		if (err) {
@@ -1356,6 +1378,10 @@ int mmc_attach_sd(struct mmc_host *host)
 		goto remove_card;
 
 	mmc_claim_host(host);
+
+#ifdef OPLUS_FEATURE_STORAGE
+	host->detect_change_retry = 5;
+#endif
 	return 0;
 
 remove_card:
@@ -1367,6 +1393,12 @@ err:
 
 	pr_err("%s: error %d whilst initialising SD card\n",
 		mmc_hostname(host), err);
+
+#ifdef OPLUS_FEATURE_STORAGE
+	if (err)
+		host->detect_change_retry--;
+	pr_err("detect_change_retry = %d !!!,err = %d\n", host->detect_change_retry,err);
+#endif
 
 	return err;
 }

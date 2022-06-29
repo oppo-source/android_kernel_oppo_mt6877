@@ -4,14 +4,22 @@
 #
 
 ifeq ($(CONFIG_MACH_MT6833),y)
-CMDQ_PLATFORM := "mt6833"
+CMDQ_PLATFORM := mt6833
+else ifeq ($(CONFIG_MACH_MT6877),y)
+CMDQ_PLATFORM := mt6877
 else
 CMDQ_PLATFORM := $(MTK_PLATFORM)
 endif
 
+ifeq ($(CONFIG_MACH_MT6833),y)
+MDP_PLATFORM := "mt6833"
+else
+MDP_PLATFORM := $(CONFIG_MTK_PLATFORM)
+endif
+
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/mach/$(CMDQ_PLATFORM)/include \
              -I$(srctree)/drivers/misc/mediatek/smi/ \
-             -I$(srctree)/drivers/misc/mediatek/mdp/$(CMDQ_PLATFORM) \
+             -I$(srctree)/drivers/misc/mediatek/mdp/$(MDP_PLATFORM) \
              -I$(srctree)/drivers/misc/mediatek/mmp/
 
 ifeq ($(or $(strip $(CONFIG_MTK_SEC_VIDEO_PATH_SUPPORT)), $(strip $(CONFIG_MTK_CAM_SECURITY_SUPPORT))),y)
@@ -45,5 +53,5 @@ endif # $(CONFIG_MTK_SEC_VIDEO_PATH_SUPPORT) or $(CONFIG_MTK_CAM_SECURITY_SUPPOR
 
 obj-y += cmdq-test.o
 obj-y += cmdq-util.o
-obj-y += $(subst ",,$(CMDQ_PLATFORM))/cmdq-platform.o
+obj-y += $(CMDQ_PLATFORM)/cmdq-platform.o
 obj-y += cmdq-bw-mon.o

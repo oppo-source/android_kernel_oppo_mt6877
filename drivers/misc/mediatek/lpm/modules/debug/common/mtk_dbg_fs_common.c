@@ -13,14 +13,18 @@
 
 #include <mtk_dbg_common_v1.h>
 #include <mtk_lpm_module.h>
+#include <mtk_lpm_call.h>
+#include <mtk_lpm_call_type.h>
+
 #include <mtk_resource_constraint_v1.h>
 #include <mtk_idle_sysfs.h>
 #include <mtk_suspend_sysfs.h>
 #include <mtk_spm_sysfs.h>
-#include <mtk_power_gs_api.h>
+#include <gs/v1/mtk_power_gs.h>
 #include <mt-plat/mtk_ccci_common.h>
 
-#define MTK_DGB_SUSP_NODE	"/sys/kernel/debug/suspend/suspend_state"
+
+#define MTK_DGB_SUSP_NODE	"/proc/mtk_lpm/suspend/suspend_state"
 
 #undef mtk_dbg_log
 #define mtk_dbg_log(fmt, args...) \
@@ -45,15 +49,22 @@ static struct syscore_ops spm_block_syscore_ops = {
 static unsigned int mtk_suspend_debug_flag;
 static unsigned int power_golden_dump_type = GS_ALL;
 
+unsigned int mtk_idle_golden_dump_type;
 /* debugfs for debug in syscore callback */
 static int spm_syscore_dbg_suspend(void)
 {
 	if (mtk_suspend_debug_flag & MTK_DUMP_GPIO)
 		mtk_suspend_gpio_dbg();
 #if !defined(CONFIG_FPGA_EARLY_PORTING)
-#ifdef CONFIG_MTK_BASE_POWER
-	if (mtk_suspend_debug_flag & MTK_DUMP_LP_GOLDEN)
-		mt_power_gs_dump_suspend(power_golden_dump_type);
+#ifdef CONFIG_MTK_LPM_GS_DUMP_SUPPORT
+	if (mtk_suspend_debug_flag & MTK_DUMP_LP_GOLDEN) {
+		struct mtk_lpm_callee_simple *callee = NULL;
+		struct mtk_lpm_data val;
+
+		val.d.v_u32 = power_golden_dump_type;
+		if (!mtk_lpm_callee_get(MTK_LPM_CALLEE_PWR_GS, &callee))
+			callee->set(MTK_LPM_PWR_GS_TYPE_SUSPEND, &val);
+	}
 #endif
 #endif
 	mtk_suspend_clk_dbg();
@@ -82,8 +93,8 @@ static ssize_t mtk_dbg_suspend_state_read(char *ToUser, size_t sz, void *priv)
 	mtk_dbg_log("echo gpio_dump 0/1 > %s\n", MTK_DGB_SUSP_NODE);
 	mtk_dbg_log("golden dump disable/enable:\n");
 	mtk_dbg_log("echo golden_dump 0/1 > %s\n", MTK_DGB_SUSP_NODE);
-	mtk_dbg_log("golden type setting (default)PMIC[0], CG[1], DCM[2]:\n");
-	mtk_dbg_log("echo golden_type 1/3/7 > %s\n", MTK_DGB_SUSP_NODE);
+	mtk_dbg_log("golden type setting PMIC_6365[0], PMIC_6315[1], CG[2], DCM[3]:\n");
+	mtk_dbg_log("echo golden_type 0x1/3/7/f > %s\n", MTK_DGB_SUSP_NODE);
 
 	return p - ToUser;
 }
@@ -122,8 +133,9 @@ static ssize_t mtk_dbg_suspend_state_write(char *FromUser,
 				mtk_suspend_debug_flag |= MTK_DUMP_LP_GOLDEN;
 			else
 				mtk_suspend_debug_flag &= ~(MTK_DUMP_LP_GOLDEN);
-		} else if (!strcmp(cmd, "golden_type"))
+		} else if (!strcmp(cmd, "golden_type")) {
 			power_golden_dump_type = (param & 0xf);
+		}
 
 		return sz;
 	}
@@ -271,6 +283,72 @@ static const struct mtk_lp_sysfs_op mtk_dbg_spm_system_stats_fops = {
 	.fs_read = mtk_dbg_get_system_stats,
 };
 
+#ifdef VENDOR_EDIT
+static ssize_t get_oplus_rpm_stats(char *ToUserBuf,
+			  size_t sz, void *priv)
+{
+	/* dump sleep info */
+#if defined(CONFIG_MTK_ECCCI_DRIVER)
+	u32 len = 0;
+	u32 *share_mem = NULL;
+	struct md_sleep_status md_data;
+
+	share_mem = (u32 *)get_smem_start_addr(MD_SYS1,
+		SMEM_USER_LOW_POWER, NULL);
+	share_mem = share_mem + MD_SLEEP_INFO_SMEM_OFFEST;
+	memset(&md_data, 0, sizeof(struct md_sleep_status));
+	memcpy(&md_data, share_mem, sizeof(struct md_sleep_status));
+
+	len = snprintf(ToUserBuf, sz,
+	//"vmin:%x:%llx\r\n",
+	"vmin:%x:%llx\n",
+	spm_26M_off_count,
+	PCM_TICK_TO_MILLI_SEC(spm_26M_off_duration)
+	);
+
+	return (len > sz) ? sz : len;
+#else
+	return 0;
+#endif
+}
+
+static const struct mtk_lp_sysfs_op oplus_rpm_stats_fops = {
+	.fs_read = get_oplus_rpm_stats,
+};
+
+static ssize_t get_oplus_rpm_master_stats(char *ToUserBuf,
+			  size_t sz, void *priv)
+{
+	/* dump sleep info */
+#if defined(CONFIG_MTK_ECCCI_DRIVER)
+	u32 len = 0;
+	u32 *share_mem = NULL;
+	struct md_sleep_status md_data;
+
+	share_mem = (u32 *)get_smem_start_addr(MD_SYS1,
+		SMEM_USER_LOW_POWER, NULL);
+	share_mem = share_mem + MD_SLEEP_INFO_SMEM_OFFEST;
+	memset(&md_data, 0, sizeof(struct md_sleep_status));
+	memcpy(&md_data, share_mem, sizeof(struct md_sleep_status));
+
+	len = snprintf(ToUserBuf, sz,
+	 "APSS:%x:%llx\nMPSS:%x:%llx\n",
+	ap_pd_count,
+	PCM_TICK_TO_MILLI_SEC(ap_slp_duration),
+	md_data.sleep_cnt,
+	PCM_TICK_TO_MILLI_SEC(md_data.sleep_time));
+
+	return (len > sz) ? sz : len;
+#else
+	return 0;
+#endif
+}
+
+static const struct mtk_lp_sysfs_op oplus_rpm_master_stats_fops = {
+	.fs_read = get_oplus_rpm_master_stats,
+};
+#endif
+
 static void mtk_dbg_spm_fs_init(void)
 {
 	mtk_spm_sysfs_root_entry_create();
@@ -283,6 +361,12 @@ static void mtk_dbg_spm_fs_init(void)
 			, &mtk_dbg_spm_spmfw_ver_fops, NULL);
 	mtk_spm_sysfs_entry_node_add("system_stats", 0444
 			, &mtk_dbg_spm_system_stats_fops, NULL);
+	#ifdef VENDOR_EDIT
+	mtk_spm_sysfs_entry_node_add("oplus_rpmh_stats", 0444
+			, &oplus_rpm_stats_fops, NULL);
+	mtk_spm_sysfs_entry_node_add("oplus_rpmh_master_stats", 0444
+			, &oplus_rpm_master_stats_fops, NULL);
+	#endif
 }
 
 static bool mtk_system_console_suspend;
@@ -310,9 +394,9 @@ static int __init mtk_dbg_common_fs_init(void)
 	/* backup and disable suspend console (enable log print) */
 	mtk_system_console_suspend = console_suspend_enabled;
 	console_suspend_enabled = false;
-
 	mtk_dbg_suspend_fs_init();
 	mtk_dbg_spm_fs_init();
+
 	register_syscore_ops(&spm_dbg_syscore_ops);
 
 	pr_info("%s %d: finish", __func__, __LINE__);

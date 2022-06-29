@@ -22,6 +22,7 @@
 
 #include "clkdbg.h"
 #include "clkdbg-mt6885.h"
+#include "clkchk.h"
 #include "clk-fmeter.h"
 #include <clk-mux.h>
 
@@ -634,6 +635,9 @@ static void __init init_custom_cmds(void)
 
 static int __init clkdbg_mt6885_init(void)
 {
+	if (!of_machine_is_compatible("mediatek,MT6885"))
+		return -ENODEV;
+
 	init_regbase();
 
 	init_custom_cmds();
@@ -657,16 +661,6 @@ subsys_initcall(clkdbg_mt6885_init);
 /*
  * MT6885: for mtcmos debug
  */
-static bool is_valid_reg(void __iomem *addr)
-{
-#ifdef CONFIG_64BIT
-	return ((u64)addr & 0xf0000000) != 0UL ||
-			(((u64)addr >> 32U) & 0xf0000000) != 0UL;
-#else
-	return ((u32)addr & 0xf0000000) != 0U;
-#endif
-}
-
 void print_subsys_reg(enum dbg_sys_id id)
 {
 	struct regbase *rb_dump;

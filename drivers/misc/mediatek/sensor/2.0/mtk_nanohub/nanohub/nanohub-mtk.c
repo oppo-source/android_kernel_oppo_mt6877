@@ -108,10 +108,10 @@ int nanohub_ipi_write(void *data, u8 *tx, int length, int timeout)
 #if CHRE_IPI_DEBUG
 	int i;
 
-	pr_debug("AP->(%d) ", length);
+	pr_info("AP->(%d) ", length);
 	for (i = 0; i < length; i++)
 		pr_debug("%02x ", tx[i]);
-	pr_debug("\n");
+	pr_info("\n");
 #endif
 	ret = SCP_IPI_ERROR;
 	while (retry-- && (READ_ONCE(scp_nano_ipi_status) == 1)) {
@@ -122,8 +122,9 @@ int nanohub_ipi_write(void *data, u8 *tx, int length, int timeout)
 	}
 
 	if (ret == SCP_IPI_BUSY)
-		pr_debug("%s ipi busy, ret=%d\n", __func__, ret);
+		pr_info("%s ipi busy, ret=%d\n", __func__, ret);
 
+        pr_info("%s ret=%d\n", __func__, ret);
 	if (ret == SCP_IPI_DONE)
 		return length;
 	else

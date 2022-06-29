@@ -46,6 +46,9 @@
 #include <asm/tlbflush.h>
 
 #include <acpi/ghes.h>
+#if defined(OPLUS_FEATURE_IOMONITOR) && defined(CONFIG_IOMONITOR)
+#include <linux/iomonitor/iomonitor.h>
+#endif /*OPLUS_FEATURE_IOMONITOR*/
 
 struct fault_info {
 	int	(*fn)(unsigned long addr, unsigned int esr,
@@ -351,10 +354,6 @@ static void do_bad_area(unsigned long addr, unsigned int esr, struct pt_regs *re
 	struct task_struct *tsk = current;
 	const struct fault_info *inf;
 
-	/*
-	 * If we are in kernel mode at this point, we have no context to
-	 * handle this fault with.
-	 */
 	if (user_mode(regs)) {
 		inf = esr_to_fault_info(esr);
 		__do_user_fault(tsk, addr, esr, inf->sig, inf->code, regs, 0);
@@ -526,6 +525,9 @@ done:
 		 */
 		if (major) {
 			tsk->maj_flt++;
+#if defined(OPLUS_FEATURE_IOMONITOR) && defined(CONFIG_IOMONITOR)
+			iomonitor_update_fs_stats(FS_MAJOR_FAULT, 1);
+#endif /*OPLUS_FEATURE_IOMONITOR*/
 			perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS_MAJ, 1, regs,
 				      addr);
 		} else {

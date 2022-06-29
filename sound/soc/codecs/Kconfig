@@ -221,6 +221,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_WM9712 if SND_SOC_AC97_BUS
 	select SND_SOC_WM9713 if SND_SOC_AC97_BUS
 	select SND_SOC_RT5509 if I2C
+	select SND_SOC_RT5512 if I2C
 	select SND_SOC_MT6660 if I2C
 	select SND_SOC_TFA9874 if I2C
         help
@@ -1165,9 +1166,8 @@ config SND_SOC_ZX_AUD96P22
 config SND_SOC_MT6660
 	tristate "Mediatek MT6660 speaker amplifier"
 	depends on I2C
-	select CRC32
-	select CRYPTO_SHA256
-	select CRYPTO_RSA
+	select RT_REGMAP
+	select SND_RICHTEK_SPM
 	help
 	  Config of MT6660. It is a Smart power
 	  amplifier which contain speaker protection,
@@ -1190,6 +1190,23 @@ config SND_SOC_AW87339
 	  It is a speaker amp which connect with MTK
 	  PMIC device which has no speaker protection
 	  function.
+
+config SND_SOC_SIA8109
+	tristate "SoC Audio for SIA8109 speaker amplifier"
+	depends on I2C
+	help
+	  This option enables support for SIA8109 speaker
+	  amplifier. It is a speaker which connect with MTK
+	  PMIC device which has no speaker protection.
+
+config SND_SOC_AA012
+	tristate "Support AA012 driver"
+	depends on I2C
+	help
+	  This option enables support for AA012 boards.
+	  Speaker amp use NXP TFA9874 codec,
+	  USB headset use fsa44xx codec,
+	  This only using on special project phone.
 
 config SND_SOC_LM4857
 	tristate
@@ -1238,5 +1255,29 @@ config SND_SOC_RT5509
 	tristate "Richtek RT5509 Smart AMP"
 	depends on I2C
 	select RT_REGMAP
+
+#ifdef OPLUS_BUG_COMPATIBILITY
+config SND_SOC_CODEC_MICBIAS_2P8V
+	bool "Set Micbias 2.8V After Recording"
+	default n
+#endif /* OPLUS_BUG_COMPATIBILITY */
+
+config SND_RICHTEK_SPM
+	bool "Richtek SPM Class"
+	help
+	  Say Y here to enable Richtek SPM Class support.
+	  This is a IPC Command for audio dsp and amp driver.
+	  Enable it, driver can get hifi3 data.
+	  Disable it, driver cannot get hifi3 data.
+
+config SND_SOC_RT5512
+	tristate "Mediatek RT5512 speaker amplifier"
+	depends on I2C
+	select SND_RICHTEK_SPM
+	help
+	  Config of RT5512. It is a Smart power
+	  amplifier which contain speaker protection,
+	  multi-band DRC, equalizer function. It would
+	  be set to yes if device with RT5512 on it.
 
 endmenu

@@ -598,15 +598,27 @@ TRACE_EVENT(sched_blocked_reason,
 		__field( pid_t,	pid	)
 		__field( void*, caller	)
 		__field( bool, io_wait	)
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+		__array( unsigned long, backtrace, 4)
+#endif
 	),
 
 	TP_fast_assign(
 		__entry->pid	= tsk->pid;
 		__entry->caller = (void*)get_wchan(tsk);
 		__entry->io_wait = tsk->in_iowait;
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+		memcpy(__entry->backtrace,get_backtrace(tsk),4 * sizeof(unsigned long));
+#endif
 	),
 
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	TP_printk("pid=%d iowait=%d caller=%pS layer1=%pS layer2=%pS layer3=%pS layer4=%pS",
+	__entry->pid, __entry->io_wait, __entry->caller, __entry->backtrace[0],
+	__entry->backtrace[1], __entry->backtrace[2], __entry->backtrace[3] )
+#else
 	TP_printk("pid=%d iowait=%d caller=%pS", __entry->pid, __entry->io_wait, __entry->caller)
+#endif
 );
 
 /*
@@ -1156,6 +1168,40 @@ TRACE_EVENT_CONDITION(sched_overutilized,
 	TP_printk("overutilized=%d sd_span=%s",
 		__entry->overutilized ? 1 : 0, __entry->cpulist)
 );
+
+#ifdef CONFIG_OPLUS_PREFER_SILVER
+TRACE_EVENT(sched_cpu_skip,
+
+	TP_PROTO(struct task_struct *p, bool sysctl_prefer_silver, bool is_ux_task, bool check_freq, bool check_task_util, bool check_cpu_util),
+
+	TP_ARGS(p, sysctl_prefer_silver, is_ux_task, check_freq, check_task_util, check_cpu_util),
+
+	TP_STRUCT__entry(
+		__field(int,    pid)
+		__array(char,   comm, TASK_COMM_LEN)
+		__field(bool,   sysctl_prefer_silver)
+		__field(bool,   is_ux_task)
+		__field(bool,   check_freq)
+		__field(bool,   check_task_util)
+		__field(bool,   check_cpu_util)
+	),
+
+	TP_fast_assign(
+		__entry->pid                    = p ? p->pid : -1;
+		memcpy(__entry->comm, p ? p->comm:"NULL", TASK_COMM_LEN);
+		__entry->sysctl_prefer_silver   = sysctl_prefer_silver;
+		__entry->is_ux_task             = is_ux_task;
+		__entry->check_freq             = check_freq;
+		__entry->check_task_util        = check_task_util;
+		__entry->check_cpu_util         = check_cpu_util;
+	),
+
+	TP_printk("pid=%d comm=%s prefer_silver_enabled=%d is_ux_task=%d check_freq=%d check_task_util=%d check_cpu_util=%d",
+		__entry->pid, __entry->comm, __entry->sysctl_prefer_silver,
+		__entry->is_ux_task, __entry->check_freq,
+		__entry->check_task_util, __entry->check_cpu_util)
+);
+#endif /* CONFIG_OPLUS_PREFER_SILVER */
 
 /*
  * Tracepoint for find_best_target

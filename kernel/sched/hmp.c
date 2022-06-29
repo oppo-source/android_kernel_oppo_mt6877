@@ -1342,7 +1342,11 @@ static unsigned int hmp_idle_pull(int this_cpu)
 	}
 	if (!p)
 		goto done;
-
+#if defined(OPLUS_FEATURE_UIFIRST) && defined(CONFIG_SCHED_WALT)
+	if(sysctl_uifirst_enabled && sysctl_slide_boost_enabled && is_heavy_ux_task(p) &&
+		test_ux_task_cpu(task_cpu(p)) && !test_ux_task_cpu(this_cpu))
+		goto done;
+#endif
 	moved = migrate_running_task(this_cpu, p, target);
 done:
 	spin_unlock(&hmp_force_migration);

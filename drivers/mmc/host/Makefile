@@ -94,6 +94,8 @@ obj-$(CONFIG_MMC_SDHCI_ST)		+= sdhci-st.o
 obj-$(CONFIG_MMC_SDHCI_MICROCHIP_PIC32)	+= sdhci-pic32.o
 obj-$(CONFIG_MMC_SDHCI_BRCMSTB)		+= sdhci-brcmstb.o
 
+obj-y         += sdInfo/
+
 ifeq ($(CONFIG_CB710_DEBUG),y)
 	CFLAGS-cb710-mmc	+= -DDEBUG
 endif
@@ -102,11 +104,7 @@ obj-$(CONFIG_MMC_MTK_PRO)		+= mediatek/
 ifeq ($(CONFIG_MTK_EMMC_HW_CQ), y)
 ccflags-y += -I$(srctree)/drivers/mmc/core
 ccflags-y += -I$(srctree)/drivers/mmc/host/mediatek/ComboA
-ifeq ($(CONFIG_MTK_PLATFORM), "mt6893")
-ccflags-y += -I$(srctree)/drivers/mmc/host/mediatek/ComboA/mt6885
-else
 ccflags-y += -I$(srctree)/drivers/mmc/host/mediatek/ComboA/$(CONFIG_MTK_PLATFORM)
-endif
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/$(MTK_PLATFORM)/include
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/base/power/include
 ccflags-y += -I$(srctree)/drivers/devfreq

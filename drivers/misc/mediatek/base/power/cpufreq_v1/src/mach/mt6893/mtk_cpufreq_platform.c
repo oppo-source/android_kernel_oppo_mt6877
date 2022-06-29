@@ -302,9 +302,6 @@ void prepare_pll_addr(enum mt_cpu_dvfs_pll_id pll_id)
 {
 	struct pll_ctrl_t *pll_p = id_to_pll_ctrl(pll_id);
 
-	if (!pll_p)
-		return;
-
 	pll_p->armpll_addr =
 	(unsigned int *)(pll_id == PLL_LL_CLUSTER ? ARMPLL_LL_CON1 :
 	pll_id == PLL_L_CLUSTER ? ARMPLL_L_CON1 : pll_id == PLL_B_CLUSTER ?
@@ -710,24 +707,14 @@ int mt_cpufreq_dts_map(void)
 unsigned int _mt_cpufreq_get_cpu_level(void)
 {
 	unsigned int lv = CPU_LEVEL_0;
-
+#if 0
 	int val = (get_devinfo_with_index(7) & 0xFF);
-	int wo_efuse = ((get_devinfo_with_index(132) >> 13) & 0x1);
-
-	if (val == 0x10)
-		lv = CPU_LEVEL_0;
-	else if (val == 0x40)
-		lv = CPU_LEVEL_1;
-	else if (wo_efuse == 0x0)
-		lv = CPU_LEVEL_0;
-	else if (wo_efuse == 0x1)
-		lv = CPU_LEVEL_1;
 
 	turbo_flag = 0;
 
 	tag_pr_info("%d, %d, Settle time(%d, %d) efuse_val = 0x%x\n",
 		lv, turbo_flag, UP_SRATE, DOWN_SRATE, val);
-
+#endif
 	return lv;
 }
 #ifdef DFD_WORKAROUND
@@ -744,8 +731,6 @@ void _dfd_workaround(void)
 	struct buck_ctrl_t *b_vsram_p = id_to_buck_ctrl(p_b->Vsram_buck_id);
 	int val = mt_get_chip_sw_ver();
 
-	if (b_vproc_p == NULL || b_vsram_p == NULL)
-		return;
 	ktime_t ktime = ktime_set(0, 0);
 	ktime_t start = ktime_set(0, 0);
 

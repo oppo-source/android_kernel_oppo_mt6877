@@ -13,7 +13,6 @@
 
 #include "regulator.h"
 
-
 static const int regulator_voltage[] = {
 	REGULATOR_VOLTAGE_0,
 	REGULATOR_VOLTAGE_1000,
@@ -30,11 +29,18 @@ static const int regulator_voltage[] = {
 
 struct REGULATOR_CTRL regulator_control[REGULATOR_TYPE_MAX_NUM] = {
 	{"vcama"},
+	{"vcamaf"},
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
+#ifdef CONFIG_REGULATOR_RT5133
+//	{"vcama1"},
+#endif
+#endif
 	{"vcamd"},
 	{"vcamio"},
 };
 
 static struct REGULATOR reg_instance;
+
 
 static enum IMGSENSOR_RETURN regulator_init(
 	void *pinstance,
@@ -109,8 +115,7 @@ static enum IMGSENSOR_RETURN regulator_set(
 	int reg_type_offset;
 	atomic_t             *enable_cnt;
 
-
-	if (pin > IMGSENSOR_HW_PIN_DOVDD   ||
+	if (pin > IMGSENSOR_HW_PIN_AVDD1   ||
 	    pin < IMGSENSOR_HW_PIN_AVDD    ||
 	    pin_state < IMGSENSOR_HW_PIN_STATE_LEVEL_0 ||
 	    pin_state >= IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH ||
@@ -190,7 +195,7 @@ static enum IMGSENSOR_RETURN regulator_dump(void *pinstance)
 					j,
 					regulator_control[i].pregulator_type,
 					regulator_get_voltage(
-						preg->pregulator[j][i]));
+					preg->pregulator[j][i]));
 		}
 	}
 	return IMGSENSOR_RETURN_SUCCESS;

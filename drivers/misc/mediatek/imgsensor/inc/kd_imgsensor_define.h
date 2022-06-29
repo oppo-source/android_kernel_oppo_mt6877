@@ -25,6 +25,10 @@
 #include <linux/compat.h>
 #endif
 
+#ifndef VENDOR_EDIT
+#define VENDOR_EDIT
+#endif
+
 /*************************************************
  *
  **************************************************/
@@ -304,6 +308,17 @@ enum ACDK_SENSOR_FEATURE_ENUM {
 	SENSOR_FEATURE_GET_SEAMLESS_SCENARIOS,
 	SENSOR_FEATURE_GET_SEAMLESS_SYSTEM_DELAY,
 	SENSOR_FEATURE_SET_SEAMLESS_EXTEND_FRAME_LENGTH,
+	#ifdef VENDOR_EDIT
+	SENSOR_FEATURE_GET_EEPROM_DATA = 0x8000,
+	SENSOR_FEATURE_SET_SENSOR_OTP,
+	SENSOR_FEATURE_CHECK_MODULE_ID,
+	SENSOR_FEATURE_GET_MODULE_SN,
+	SENSOR_FEATURE_GET_MODULE_INFO,
+
+	SENSOR_FEATURE_GET_EEPROM_COMDATA = 0x9000,
+	SENSOR_FEATURE_GET_EEPROM_STEREODATA,
+	SENSOR_FEATURE_GET_DISTORTIONPARAMS,
+	#endif
 	SENSOR_FEATURE_MAX
 };
 
@@ -1016,7 +1031,7 @@ struct SET_PD_BLOCK_INFO_T {
 	MUINT32 i4BlockNumY;
 	/* 1: 1st line is long exposure, 0: 1st line is short exposure*/
 	MUINT32 i4LeFirst;
-	MUINT32 i4Crop[10][2]; /* [scenario][crop] -> (xcrop, ycrop) */
+	MUINT32 i4Crop[15][2]; /* [scenario][crop] -> (xcrop, ycrop) */
 };
 
 enum IMGSENSOR_HDR_SUPPORT_TYPE_ENUM {
@@ -1199,6 +1214,39 @@ struct IMAGESENSOR_GET_SUPPORTED_ISP_CLK {
 	unsigned int clklevel[ISP_CLK_LEVEL_CNT]; /* Reocrd each clk level */
 };
 
+#ifdef VENDOR_EDIT
+#define OPPO_STEREO_CALI_DATA_LENGTH          (1561)
+#define OPPO_STEREO_CALI_DATA_LENGTH_QCOM     (1561 + 128)
+#define DUALCAM_CALI_DATA_LENGTH_TOTAL        (3102)
+#define DUALCAM_CALI_DATA_LENGTH_TOTAL_QCOM   (3102 + 128)
+
+#define DUALCAM_CALI_DATA_LENGTH_TOTAL_TELE   (2450)
+
+#define CALI_DATA_MASTER_LENGTH               (1557)
+#define CALI_DATA_MASTER_LENGTH_QCOM          (1557+128)
+#define CALI_DATA_SLAVE_LENGTH                (1545)
+#define CALI_DATA_SLAVE_TELE_LENGTH           (909)
+#define CAMERA_EEPPROM_COMDATA_LENGTH         (64)
+#define CAMERA_DISTORTIONPARAMS_LENGTH        (3441)
+#define DEFAULT_DISTORTIONPARAMS_START_ADDR   (0x2C00)
+#define OV8856_DISTORTIONPARAMS_START_ADDR    (0x2C00)
+#define IMX355_DISTORTIONPARAMS_START_ADDR    (0x0CA0)
+
+#define OV64B_STEREO_START_ADDR               (0x2000)
+#define IMX319_STEREO_START_ADDR              (0x2600)
+#define IMX355_STEREO_START_ADDR              (0x2E00)
+#define HI846_STEREO_START_ADDR               (0x1E80)
+#define OV48B_STEREO_START_ADDR               (0x2840)
+
+typedef struct {
+  MUINT32 uSensorId;
+  MUINT32 uDeviceId;
+  MUINT16 baseAddr;
+  MUINT16 dataLength;
+  MUINT8  uData[OPPO_STEREO_CALI_DATA_LENGTH_QCOM];
+  } ACDK_SENSOR_ENGMODE_STEREO_STRUCT, *PACDK_SENSOR_ENGMODE_STEREO_STRUCT;
+#endif
+
 #ifdef CONFIG_COMPAT
 
 struct COMPAT_IMGSENSOR_GET_CONFIG_INFO_STRUCT {
@@ -1373,6 +1421,10 @@ struct SENSOR_FUNCTION_STRUCT {
 	MUINT8  arch;
 	void   *psensor_inst; /* IMGSENSOR_SENSOR_INST */
 };
+
+#ifdef VENDOR_EDIT
+typedef struct SENSOR_FUNCTION_STRUCT* PSENSOR_FUNCTION_STRUCT;
+#endif
 
 struct ACDK_KD_SENSOR_INIT_FUNCTION_STRUCT {
 	MUINT32 SensorId;

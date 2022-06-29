@@ -12,6 +12,8 @@ obj-$(CONFIG_SCSI_UFS_DWC_TC_PLATFORM) += tc-dwc-g210-pltfrm.o ufshcd-dwc.o tc-d
 ifeq ($(CONFIG_MTK_UFS_SUPPORT),y)
 ifeq (y, $(filter y, $(CONFIG_MACH_MT6893)))
 MTK_PLATFORM := mt6893
+else ifeq (y, $(filter y, $(CONFIG_MACH_MT6877)))
+MTK_PLATFORM := mt6877
 else
 MTK_PLATFORM := $(subst ",,$(CONFIG_MTK_PLATFORM))
 endif
@@ -25,7 +27,7 @@ endif
 
 obj-$(CONFIG_SCSI_UFS_QCOM) += ufs-qcom.o
 obj-$(CONFIG_SCSI_UFSHCD) += ufshcd-core.o
-ufshcd-core-y := ufshcd.o
+ufshcd-core-y := ufshcd.o ufs_signal_quality.o
 ufshcd-core-$(CONFIG_SCSI_UFS_CRYPTO) += ufshcd-crypto.o
 obj-$(CONFIG_UFSFEATURE) += ufsfeature.o
 obj-$(CONFIG_UFSHPB) += ufshpb.o

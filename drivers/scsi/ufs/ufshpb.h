@@ -62,6 +62,9 @@
 #define RETRY_DELAY_MS				5000
 
 /* HPB Support Chunk Size */
+#define HPB_4_CHUNK_LEN				1
+#define HPB_32_CHUNK_LEN			8
+#define HPB_512_CHUNK_LEN			128
 #define HPB_MULTI_CHUNK_LOW			9
 #define HPB_MULTI_CHUNK_HIGH			128
 #define MAX_HPB_CONTEXT_ID			0x7f
@@ -294,6 +297,7 @@ struct ufshpb_lu {
 	atomic64_t rb_inactive_cnt;
 	atomic64_t map_req_cnt;
 	atomic64_t pre_req_cnt;
+	unsigned long lpn_last;
 };
 
 struct ufshpb_sysfs_entry {
