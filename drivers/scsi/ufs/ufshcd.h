@@ -776,6 +776,7 @@ struct ufs_hba {
 
 	/* Work Queues */
 	struct work_struct eh_work;
+	struct work_struct inv_resp_work;
 	struct work_struct eeh_work;
 
 	/* HBA Errors */
@@ -856,6 +857,9 @@ struct ufs_hba {
 
 	struct device		bsg_dev;
 	struct request_queue	*bsg_queue;
+
+	bool invalid_resp_upiu;
+
 #if defined(CONFIG_SCSI_UFS_FEATURE)
 	struct ufsf_feature ufsf;
 #endif

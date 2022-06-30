@@ -51,10 +51,8 @@
 #include "ufshpb.h"
 #endif
 
-u32  ufs_mtk_qcmd_r_cmd_cnt;
-u32  ufs_mtk_qcmd_w_cmd_cnt;
-static bool ufs_mtk_is_data_write_cmd(char cmd_op, bool isolation);
-static bool ufs_mtk_is_data_cmd(char cmd_op, bool isolation);
+static bool ufs_mtk_is_data_write_cmd(struct scsi_cmnd *cmd, bool isolation);
+static bool ufs_mtk_is_data_cmd(struct scsi_cmnd *cmd, bool isolation);
 static bool ufs_mtk_has_ufshci_perf_heuristic(struct ufs_hba *hba);
 static void ufs_mtk_auto_hibern8(struct ufs_hba *hba, bool enable);
 
@@ -626,6 +624,37 @@ static void ufs_mtk_host_reset(struct ufs_hba *hba)
 	reset_control_deassert(host->hci_reset);
 }
 
+
+void ufs_mtk_pltfrm_host_sw_rst(struct ufs_hba *hba, u32 target)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+
+	dev_dbg(hba->dev, "ufs_mtk_host_sw_rst: 0x%x\n", target);
+
+	if (target & SW_RST_TARGET_UFSHCI)
+		reset_control_assert(host->hci_reset);
+
+	if (target & SW_RST_TARGET_UFSCPT)
+		reset_control_assert(host->crypto_reset);
+
+	if (target & SW_RST_TARGET_UNIPRO)
+		reset_control_assert(host->unipro_reset);
+
+	usleep_range(100, 110);
+
+	if (target & SW_RST_TARGET_UFSHCI)
+		reset_control_deassert(host->unipro_reset);
+
+
+	if (target & SW_RST_TARGET_UFSCPT)
+		reset_control_deassert(host->crypto_reset);
+
+	if (target & SW_RST_TARGET_UNIPRO)
+		reset_control_deassert(host->hci_reset);
+
+	usleep_range(100, 110);
+}
+
 static int ufs_mtk_init_reset_control(struct ufs_hba *hba,
 				      struct reset_control **rc,
 				      char *str)
@@ -658,7 +687,8 @@ static int ufs_mtk_hce_enable_notify(struct ufs_hba *hba,
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
-	if (status == PRE_CHANGE) {
+	switch (status) {
+	case PRE_CHANGE:
 		if (host->unipro_lpm) {
 			hba->hba_enable_delay_us = 0;
 		} else {
@@ -668,6 +698,16 @@ static int ufs_mtk_hce_enable_notify(struct ufs_hba *hba,
 
 		if (ufshcd_hba_is_crypto_supported(hba))
 			ufs_mtk_crypto_enable(hba);
+		break;
+	case POST_CHANGE:
+		if (hba->quirks & UFS_MTK_HOST_QUIRK_UFS_HCI_PERF_HEURISTIC) {
+			/* [31:16] PRE_ULTRA, [15:0] ULTRA */
+			ufshcd_writel(hba, 0x00400080,
+				REG_UFS_MTK_AXI_W_ULTRA_THR);
+		}
+		break;
+	default:
+		break;
 	}
 
 	return 0;
@@ -678,13 +718,25 @@ static void ufs_mtk_pm_qos(struct ufs_hba *hba, bool qos_en)
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
 	if (host && host->pm_qos_init) {
-		if (qos_en)
+		if (qos_en) {
+			if (hba->quirks &
+				UFS_MTK_HOST_QUIRK_UFS_HCI_PERF_HEURISTIC) {
+				pm_qos_update_request(
+				&host->req_mm_bandwidth,
+				5554);
+			}
+
 			pm_qos_update_request(
 				&host->req_cpu_dma_latency, 0);
-		else
+		} else {
 			pm_qos_update_request(
 				&host->req_cpu_dma_latency,
 				PM_QOS_DEFAULT_VALUE);
+
+			pm_qos_update_request(
+				&host->req_mm_bandwidth,
+				0);
+		}
 	}
 }
 
@@ -913,46 +965,37 @@ static int ufs_mtk_host_clk_get(struct device *dev, const char *name,
 
 	return err;
 }
-static bool ufs_mtk_is_data_write_cmd(char cmd_op, bool isolation)
+
+bool ufs_mtk_is_data_write_cmd(struct scsi_cmnd *cmd, bool isolation)
 {
+	char cmd_op = cmd->cmnd[0];
+
 	if (cmd_op == WRITE_10 || cmd_op == WRITE_16 || cmd_op == WRITE_6)
 		return true;
 
 	if (isolation) {
-		if ((cmd_op == WRITE_BUFFER) ||
-			(cmd_op == UNMAP) ||
-			(cmd_op == FORMAT_UNIT) ||
-			(cmd_op == SECURITY_PROTOCOL_OUT))
+		if (cmd->sc_data_direction == DMA_TO_DEVICE)
 			return true;
 	}
 
-#if defined(CONFIG_SCSI_UFS_HPB) || defined(CONFIG_SCSI_SKHPB)
-	/* All data out operation need check */
-	if (isolation) {
-		if (cmd_op == UFSHPB_WRITE_BUFFER)
-			return true;
-		}
-#endif
 	return false;
 }
 
-static bool ufs_mtk_is_data_cmd(char cmd_op, bool isolation)
+static bool ufs_mtk_is_data_cmd(struct scsi_cmnd *cmd, bool isolation)
 {
+	char cmd_op = cmd->cmnd[0];
+
 	if (cmd_op == WRITE_10 || cmd_op == READ_10 ||
-		cmd_op == WRITE_16 || cmd_op == READ_16 ||
-		cmd_op == WRITE_6 || cmd_op == READ_6)
+	    cmd_op == WRITE_16 || cmd_op == READ_16 ||
+	    cmd_op == WRITE_6 || cmd_op == READ_6)
 		return true;
+
 	if (isolation) {
-		if ((cmd_op == WRITE_BUFFER) ||
-			(cmd_op == UNMAP) ||
-			(cmd_op == FORMAT_UNIT) ||
-			(cmd_op == SECURITY_PROTOCOL_OUT))
+		if ((cmd->sc_data_direction == DMA_FROM_DEVICE) ||
+		    (cmd->sc_data_direction == DMA_TO_DEVICE))
 			return true;
-		}
-#if defined(CONFIG_SCSI_UFS_HPB) || defined(CONFIG_SCSI_SKHPB)
-		if (cmd_op == UFSHPB_READ_BUFFER || cmd_op == UFSHPB_WRITE_BUFFER)
-			return true;
-#endif
+	}
+
 	return false;
 }
 
@@ -962,26 +1005,37 @@ int ufs_mtk_perf_heurisic_if_allow_cmd(struct ufs_hba *hba, struct scsi_cmnd *cm
 		return 0;
 
 	/* Check rw commands only and allow all other commands. */
-	if (ufs_mtk_is_data_cmd(cmd->cmnd[0], true)) {
+	if (ufs_mtk_is_data_cmd(cmd, true)) {
+
 		if (!hba->ufs_mtk_qcmd_r_cmd_cnt &&
 			!hba->ufs_mtk_qcmd_w_cmd_cnt) {
+
 			/* Case: no on-going r or w commands. */
-			if (ufs_mtk_is_data_write_cmd(cmd->cmnd[0], true))
+
+			if (ufs_mtk_is_data_write_cmd(cmd, true))
 				hba->ufs_mtk_qcmd_w_cmd_cnt++;
 			else
 				hba->ufs_mtk_qcmd_r_cmd_cnt++;
+
 		} else {
-			if (ufs_mtk_is_data_write_cmd(cmd->cmnd[0], true)) {
+
+			if (ufs_mtk_is_data_write_cmd(cmd, true)) {
+
 				if (hba->ufs_mtk_qcmd_r_cmd_cnt)
 					return 1;
+
 				hba->ufs_mtk_qcmd_w_cmd_cnt++;
+
 			} else {
+
 				if (hba->ufs_mtk_qcmd_w_cmd_cnt)
 					return 1;
+
 				hba->ufs_mtk_qcmd_r_cmd_cnt++;
 			}
 		}
 	}
+
 	return 0;
 }
 
@@ -989,8 +1043,9 @@ void ufs_mtk_perf_heurisic_req_done(struct ufs_hba *hba, struct scsi_cmnd *cmd)
 {
 	if (!ufs_mtk_has_ufshci_perf_heuristic(hba))
 		return;
-	if (ufs_mtk_is_data_cmd(cmd->cmnd[0], true)) {
-		if (ufs_mtk_is_data_write_cmd(cmd->cmnd[0], true))
+
+	if (ufs_mtk_is_data_cmd(cmd, true)) {
+		if (ufs_mtk_is_data_write_cmd(cmd, true))
 			hba->ufs_mtk_qcmd_w_cmd_cnt--;
 		else
 			hba->ufs_mtk_qcmd_r_cmd_cnt--;
@@ -1311,6 +1366,8 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 
 	pm_qos_add_request(&host->req_cpu_dma_latency, PM_QOS_CPU_DMA_LATENCY,
 			   PM_QOS_DEFAULT_VALUE);
+	pm_qos_add_request(&host->req_mm_bandwidth,
+			   PM_QOS_MM_MEMORY_BANDWIDTH, 0);
 	host->pm_qos_init = true;
 
 	ufs_mtk_biolog_init(host->qos_allowed);
@@ -1751,6 +1808,12 @@ static void ufs_mtk_dbg_register_dump(struct ufs_hba *hba)
 	/* Direct debugging information to REG_MTK_PROBE */
 	ufshcd_writel(hba, 0x20, REG_UFS_DEBUG_SEL);
 	ufshcd_dump_regs(hba, REG_UFS_PROBE, 0x4, "Debug Probe ");
+
+	dev_info(hba->dev, "outstanding_reqs: 0x%x, tasks: 0x%x",
+		 hba->outstanding_reqs, hba->outstanding_tasks);
+	dev_info(hba->dev, "r_cmd_cnt: %d, w_cmd_cnt: %d\n",
+		 hba->ufs_mtk_qcmd_r_cmd_cnt,
+		 hba->ufs_mtk_qcmd_w_cmd_cnt);
 }
 
 static int ufs_mtk_apply_dev_quirks(struct ufs_hba *hba)
@@ -1782,15 +1845,25 @@ static void ufs_mtk_abort_handler(struct ufs_hba *hba, int tag,
 #ifdef CONFIG_MTK_AEE_FEATURE
 	u8 cmd = 0;
 
-	if (hba->lrb[tag].cmd)
-		cmd = hba->lrb[tag].cmd->cmnd[0];
+	dev_info(hba->dev, "%s: tag: %d\n", __func__, tag);
 
-	cmd_hist_disable();
-	ufs_mediatek_dbg_dump();
-	aee_kernel_warning_api(file, line, DB_OPT_FS_IO_LOG,
-		"[UFS] Command Timeout", "Command 0x%x timeout, %s:%d", cmd,
-		file, line);
-	cmd_hist_enable();
+
+	if (tag == -1) {
+		aee_kernel_warning_api(file, line, DB_OPT_FS_IO_LOG,
+			"[UFS] Invalid Resp or OCS",
+			"Invalid Resp or OCS, %s:%d",
+			file, line);
+	} else {
+		if (hba->lrb[tag].cmd)
+			cmd = hba->lrb[tag].cmd->cmnd[0];
+
+		cmd_hist_disable();
+		ufs_mediatek_dbg_dump();
+		aee_kernel_warning_api(file, line, DB_OPT_FS_IO_LOG,
+			"[UFS] Command Timeout", "Command 0x%x timeout, %s:%d",
+			cmd, file, line);
+		cmd_hist_enable();
+	}
 #endif
 }
 
@@ -1839,7 +1912,7 @@ static void ufs_mtk_setup_xfer_req(struct ufs_hba *hba, int tag,
 		lrbp = &hba->lrb[tag];
 		cmd = lrbp->cmd;
 
-		if (!ufs_mtk_is_data_cmd(cmd->cmnd[0], false))
+		if (!ufs_mtk_is_data_cmd(cmd, false))
 			return;
 
 		ufs_mtk_biolog_send_command(tag, cmd);
@@ -1862,7 +1935,7 @@ static void ufs_mtk_compl_xfer_req(struct ufs_hba *hba, int tag,
 		lrbp = &hba->lrb[tag];
 		cmd = lrbp->cmd;
 
-		if (!ufs_mtk_is_data_cmd(cmd->cmnd[0], false))
+		if (!ufs_mtk_is_data_cmd(cmd, false))
 			return;
 
 		req_mask = hba->outstanding_reqs &
