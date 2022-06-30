@@ -1441,7 +1441,7 @@ void ufs_mtk_wait_idle_state(struct ufs_hba *hba, unsigned long retry_ms)
 		dev_info(hba->dev, "wait idle tmo: 0x%x\n", val);
 }
 
-static void _ufs_mtk_auto_hibern8_update(struct ufs_hba *hba, bool enable)
+static void ufs_mtk_auto_hibern8_update(struct ufs_hba *hba, bool enable)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
 
@@ -1461,15 +1461,6 @@ static void _ufs_mtk_auto_hibern8_update(struct ufs_hba *hba, bool enable)
 		ufs_mtk_wait_idle_state(hba, 5);
 }
 
-static void ufs_mtk_auto_hibern8_update(struct ufs_hba *hba, bool enable)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(hba->host->host_lock, flags);
-	_ufs_mtk_auto_hibern8_update(hba, enable);
-	spin_unlock_irqrestore(hba->host->host_lock, flags);
-}
-
 static int ufs_mtk_pre_pwr_change(struct ufs_hba *hba,
 				  struct ufs_pa_layer_attr *dev_max_params,
 				  struct ufs_pa_layer_attr *dev_req_params)
@@ -1478,9 +1469,6 @@ static int ufs_mtk_pre_pwr_change(struct ufs_hba *hba,
 	struct ufs_dev_params host_cap;
 	u32 adapt_val;
 	int ret;
-
-	if (ufs_mtk_has_broken_auto_hibern8(hba))
-		ufs_mtk_auto_hibern8_update(hba, false);
 
 	host_cap.tx_lanes = UFS_MTK_LIMIT_NUM_LANES_TX;
 	host_cap.rx_lanes = UFS_MTK_LIMIT_NUM_LANES_RX;
@@ -1878,7 +1866,7 @@ static void ufs_mtk_handle_broken_auto_hibern8(struct ufs_hba *hba,
 	 */
 	if (!out_reqs && !hba->outstanding_tasks &&
 		(!enable || (enable && !hba->pm_op_in_progress)))
-		_ufs_mtk_auto_hibern8_update(hba, enable);
+		ufshcd_vops_auto_hibern8(hba, enable);
 }
 
 static void ufs_mtk_event_notify(struct ufs_hba *hba,
@@ -1966,24 +1954,6 @@ static void ufs_mtk_compl_task_mgmt(struct ufs_hba *hba,
 	ufs_mtk_handle_broken_auto_hibern8(hba, hba->outstanding_reqs, true);
 }
 
-static void ufs_mtk_hibern8_notify(struct ufs_hba *hba, enum uic_cmd_dme cmd,
-				   enum ufs_notify_change_status status)
-{
-	int ret;
-	u32 reg = VS_LINK_UP;
-
-	if (!ufs_mtk_has_broken_auto_hibern8(hba))
-		return;
-
-	if (cmd == UIC_CMD_DME_HIBER_ENTER && status == PRE_CHANGE) {
-		ufs_mtk_auto_hibern8_update(hba, false);
-
-		ret = ufs_mtk_wait_link_state(hba, &reg, 100);
-		if (ret)
-			ufshcd_link_recovery(hba);
-	}
-}
-
 static void ufs_mtk_auto_hibern8(struct ufs_hba *hba, bool enable)
 {
 	if (!ufs_mtk_has_broken_auto_hibern8(hba))
@@ -2025,7 +1995,6 @@ static struct ufs_hba_variant_ops ufs_hba_mtk_vops = {
 	.compl_xfer_req      = ufs_mtk_compl_xfer_req,
 	.setup_task_mgmt     = ufs_mtk_setup_task_mgmt,
 	.compl_task_mgmt     = ufs_mtk_compl_task_mgmt,
-	.hibern8_notify      = ufs_mtk_hibern8_notify,
 	.auto_hibern8        = ufs_mtk_auto_hibern8,
 	.apply_dev_quirks    = ufs_mtk_apply_dev_quirks,
 	.suspend             = ufs_mtk_suspend,
