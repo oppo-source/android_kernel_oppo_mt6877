@@ -1277,9 +1277,9 @@ static inline void proxy_setup_channel_mapping(struct port_proxy *proxy_p)
 	for (i = 0; i < proxy_p->port_number; i++) {
 		port = proxy_p->ports + i;
 
-		if (port->rx_ch < CCCI_MAX_CH_NUM)
+		if (port->rx_ch >= 0 && port->rx_ch < CCCI_MAX_CH_NUM)
 			port_list[port->rx_ch] = port;
-		if (port->tx_ch < CCCI_MAX_CH_NUM)
+		if (port->tx_ch >= 0 && port->tx_ch < CCCI_MAX_CH_NUM)
 			port_list[port->tx_ch] = port;
 
 		/*setup RX_CH=>port list mapping*/
