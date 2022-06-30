@@ -3378,7 +3378,9 @@ void bmd_ctrl_cmd_from_user(void *nl_data, struct fgd_nl_msg_t *ret_msg)
 		{
 			int is_charger_exist = 0;
 
-#if defined(CONFIG_MACH_MT6877)
+#if defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6853) \
+	|| defined(CONFIG_MACH_MT6893) || defined(CONFIG_MACH_MT6873)                         \
+	|| defined(CONFIG_MACH_MT6771) || defined(CONFIG_MACH_MT6785)
 			if (battery_main.BAT_STATUS == POWER_SUPPLY_STATUS_CHARGING)
 				is_charger_exist = true;
 			else
