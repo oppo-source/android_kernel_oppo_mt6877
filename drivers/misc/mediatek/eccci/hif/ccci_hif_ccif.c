@@ -1827,7 +1827,7 @@ static int ccif_debug(unsigned char hif_id,
 		if (ccif_ctrl->wakeup_ch) {
 			ccif_ctrl->wakeup_count++;
 			CCCI_NOTICE_LOG(-1, TAG,
-				"CCIF_MD wakeup source: (0x%X)(%u)\n",
+				"CCIF_MD wakeup source: (0x%lX)(%u)\n",
 				ccif_ctrl->wakeup_ch, ccif_ctrl->wakeup_count);
 		}
 		if (test_and_clear_bit(AP_MD_CCB_WAKEUP, &ccif_ctrl->wakeup_ch))
