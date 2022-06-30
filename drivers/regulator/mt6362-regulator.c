@@ -349,10 +349,14 @@ static const struct mt6362_regulator_irqt irqts[] = {
 static int mt6362_regulator_irq_register(struct regulator_dev *rdev)
 {
 	struct device *dev = rdev_get_dev(rdev);
-	struct device_node *np = dev->of_node;
+	struct device_node *np;
 	int i, irq, rv;
 
 	if (dev == NULL)
+		return -EINVAL;
+
+	np = dev->of_node;
+	if (np == NULL)
 		return -EINVAL;
 
 	for (i = 0; i < ARRAY_SIZE(irqts); i++) {
