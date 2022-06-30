@@ -2077,7 +2077,7 @@ void ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 	ufshcd_add_command_trace(hba, task_tag, "send");
 	ufshcd_clk_scaling_start_busy(hba);
 
-	if ((hba->quirks & UFS_MTK_HOST_QUIRK_UFS_HCI_PERF_HEURISTIC) &&
+	if (ufshcd_vops_has_ufshci_perf_heuristic(hba) &&
 		hba->ufs_mtk_qcmd_r_cmd_cnt) {
 		bool timeout = false;
 		ktime_t start;
@@ -2114,7 +2114,7 @@ void ufshcd_send_command(struct ufs_hba *hba, unsigned int task_tag)
 	wmb();
 
 
-	if ((hba->quirks & UFS_MTK_HOST_QUIRK_UFS_HCI_PERF_HEURISTIC) &&
+	if (ufshcd_vops_has_ufshci_perf_heuristic(hba) &&
 	    hba->ufs_mtk_qcmd_r_cmd_cnt)
 		udelay(1);
 }

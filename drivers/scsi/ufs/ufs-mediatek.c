@@ -700,7 +700,7 @@ static int ufs_mtk_hce_enable_notify(struct ufs_hba *hba,
 			ufs_mtk_crypto_enable(hba);
 		break;
 	case POST_CHANGE:
-		if (hba->quirks & UFS_MTK_HOST_QUIRK_UFS_HCI_PERF_HEURISTIC) {
+		if (ufs_mtk_has_ufshci_perf_heuristic(hba)) {
 			/* [31:16] PRE_ULTRA, [15:0] ULTRA */
 			ufshcd_writel(hba, 0x00400080,
 				REG_UFS_MTK_AXI_W_ULTRA_THR);
@@ -719,23 +719,15 @@ static void ufs_mtk_pm_qos(struct ufs_hba *hba, bool qos_en)
 
 	if (host && host->pm_qos_init) {
 		if (qos_en) {
-			if (hba->quirks &
-				UFS_MTK_HOST_QUIRK_UFS_HCI_PERF_HEURISTIC) {
-				pm_qos_update_request(
-				&host->req_mm_bandwidth,
-				5554);
-			}
+			if (ufs_mtk_has_ufshci_perf_heuristic(hba))
+				pm_qos_update_request(&host->req_mm_bandwidth, 5554);
 
-			pm_qos_update_request(
-				&host->req_cpu_dma_latency, 0);
+			pm_qos_update_request(&host->req_cpu_dma_latency, 0);
 		} else {
-			pm_qos_update_request(
-				&host->req_cpu_dma_latency,
-				PM_QOS_DEFAULT_VALUE);
+			pm_qos_update_request(&host->req_cpu_dma_latency, PM_QOS_DEFAULT_VALUE);
 
-			pm_qos_update_request(
-				&host->req_mm_bandwidth,
-				0);
+			if (ufs_mtk_has_ufshci_perf_heuristic(hba))
+				pm_qos_update_request(&host->req_mm_bandwidth, 0);
 		}
 	}
 }
@@ -1396,6 +1388,7 @@ void ufs_mtk_exit(struct ufs_hba *hba)
 		/* remove pm_qos when exit */
 		mtk_pm_qos_remove_request(host->req_vcore);
 		pm_qos_remove_request(&host->req_cpu_dma_latency);
+		pm_qos_remove_request(&host->req_mm_bandwidth);
 		host->pm_qos_init = false;
 	}
 
