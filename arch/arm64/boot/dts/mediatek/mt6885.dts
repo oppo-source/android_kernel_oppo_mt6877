@@ -2620,6 +2620,7 @@ page_owner=on loop.max_part=7";
 		charger = <&mt6360_chg>;
 		dev-conn = <&ssusb>;
 		mediatek,bypss-typec-sink = <1>;
+		not_support_u3;
 	};
 
 	usb_boost_manager {
