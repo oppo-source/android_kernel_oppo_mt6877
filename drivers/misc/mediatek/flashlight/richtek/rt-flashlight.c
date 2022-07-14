@@ -42,12 +42,13 @@ static ssize_t type_show(struct device *dev,
 {
 	struct flashlight_device *flashlight_dev = to_flashlight_device(dev);
 	int size = ARRAY_SIZE(flashlight_type_string);
+	unsigned int type = flashlight_dev->props.type;
 
-	if (flashlight_dev->props.type >= size)
+	if (type >= size)
 		return -EINVAL;
 
 	return scnprintf(buf, PAGE_SIZE, "%s\n",
-		       flashlight_type_string[flashlight_dev->props.type]);
+		       flashlight_type_string[type]);
 }
 
 static ssize_t mode_show(struct device *dev,
@@ -295,7 +296,7 @@ struct flashlight_device *flashlight_device_register(const char *name,
 	int rc;
 
 	pr_debug("%s: name=%s\n", __func__, name);
-	flashlight_dev = kzalloc(sizeof(*flashlight_dev), GFP_KERNEL);
+	flashlight_dev = devm_kzalloc(parent, sizeof(*flashlight_dev), GFP_KERNEL);
 	if (!flashlight_dev)
 		return ERR_PTR(-ENOMEM);
 
