@@ -413,7 +413,7 @@ static void dump_drb_queue_data(unsigned int qno)
 	u64 *data_64ptr;
 	u8 *data_8ptr;
 
-	if (!dpmaif_ctrl || qno >= DPMAIF_TXQ_NUM || qno < 0) {
+	if (!dpmaif_ctrl || qno >= DPMAIF_TXQ_NUM) {
 		CCCI_ERROR_LOG(-1, TAG,
 			"[%s] error: dpmaif_ctrl = %p; qno = %d",
 			__func__, dpmaif_ctrl, qno);
