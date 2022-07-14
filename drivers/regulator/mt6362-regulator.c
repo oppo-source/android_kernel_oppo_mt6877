@@ -352,8 +352,9 @@ static int mt6362_regulator_irq_register(struct regulator_dev *rdev)
 	struct device_node *np;
 	int i, irq, rv;
 
-	if (dev == NULL)
+	if (dev == NULL || dev->of_node == NULL)
 		return -EINVAL;
+	np = dev->of_node;
 
 	np = dev->of_node;
 	if (np == NULL)
