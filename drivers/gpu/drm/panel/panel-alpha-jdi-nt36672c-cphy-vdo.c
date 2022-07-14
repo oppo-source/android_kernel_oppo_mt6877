@@ -830,6 +830,8 @@ static struct mtk_panel_params ext_params = {
 		.hfp = 396,
 		.vfp = 2528,
 	},
+	.lfr_enable = 1,
+	.lfr_minimum_fps = 60,
 };
 
 static struct mtk_panel_params ext_params_90hz = {
@@ -889,6 +891,8 @@ static struct mtk_panel_params ext_params_90hz = {
 		.hfp = 396,
 		.vfp = 879,
 	},
+	.lfr_enable = 1,
+	.lfr_minimum_fps = 60,
 };
 
 static struct mtk_panel_params ext_params_120hz = {
@@ -947,6 +951,8 @@ static struct mtk_panel_params ext_params_120hz = {
 		.hfp = 396,
 		.vfp = 54,
 	},
+	.lfr_enable = 1,
+	.lfr_minimum_fps = 60,
 };
 
 static int panel_ata_check(struct drm_panel *panel)
