@@ -110,7 +110,7 @@ extern struct m4u_port_t gM4uPort[];
 
 static inline char *m4u_get_port_name(unsigned int portID)
 {
-	if ((portID < M4U_PORT_NR) &&  (portID >= M4U_PORT_MIN))
+	if (portID < M4U_PORT_NR)
 		return gM4uPort[portID].name;
 
 	return "m4u_port_unknown";
