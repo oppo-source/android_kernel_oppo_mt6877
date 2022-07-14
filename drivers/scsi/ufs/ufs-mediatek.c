@@ -720,14 +720,14 @@ static void ufs_mtk_pm_qos(struct ufs_hba *hba, bool qos_en)
 	if (host && host->pm_qos_init) {
 		if (qos_en) {
 			if (ufs_mtk_has_ufshci_perf_heuristic(hba))
-				pm_qos_update_request(&host->req_mm_bandwidth, 5554);
+				mtk_pm_qos_update_request(&host->req_mm_bandwidth, 5554);
 
 			pm_qos_update_request(&host->req_cpu_dma_latency, 0);
 		} else {
 			pm_qos_update_request(&host->req_cpu_dma_latency, PM_QOS_DEFAULT_VALUE);
 
 			if (ufs_mtk_has_ufshci_perf_heuristic(hba))
-				pm_qos_update_request(&host->req_mm_bandwidth, 0);
+				mtk_pm_qos_update_request(&host->req_mm_bandwidth, 0);
 		}
 	}
 }
@@ -1358,8 +1358,8 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 
 	pm_qos_add_request(&host->req_cpu_dma_latency, PM_QOS_CPU_DMA_LATENCY,
 			   PM_QOS_DEFAULT_VALUE);
-	pm_qos_add_request(&host->req_mm_bandwidth,
-			   PM_QOS_MM_MEMORY_BANDWIDTH, 0);
+	mtk_pm_qos_add_request(&host->req_mm_bandwidth,
+			   MTK_PM_QOS_MEMORY_BANDWIDTH, 0);
 	host->pm_qos_init = true;
 
 	ufs_mtk_biolog_init(host->qos_allowed);
@@ -1388,7 +1388,7 @@ void ufs_mtk_exit(struct ufs_hba *hba)
 		/* remove pm_qos when exit */
 		mtk_pm_qos_remove_request(host->req_vcore);
 		pm_qos_remove_request(&host->req_cpu_dma_latency);
-		pm_qos_remove_request(&host->req_mm_bandwidth);
+		mtk_pm_qos_remove_request(&host->req_mm_bandwidth);
 		host->pm_qos_init = false;
 	}
 
