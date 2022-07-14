@@ -598,12 +598,22 @@ static const struct drm_display_mode performance_mode_1 = {
 static struct mtk_panel_params ext_params = {
 	.output_mode = MTK_PANEL_DUAL_PORT,
 	.lcm_cmd_if = MTK_PANEL_DUAL_PORT,
-	.cust_esd_check = 0,
-	.esd_check_enable = 0,
+	.cust_esd_check = 1,
+	.esd_check_enable = 1,
 	.lcm_esd_check_table[0] = {
-		.cmd = 0x53,
+		.cmd = 0x0A,
 		.count = 1,
-		.para_list[0] = 0x24,
+		.para_list[0] = 0x9c,
+	},
+	.lcm_esd_check_table[1] = {
+		.cmd = 0x0B,
+		.count = 1,
+		.para_list[0] = 0x0,
+	},
+	.lcm_esd_check_table[2] = {
+		.cmd = 0x0C,
+		.count = 1,
+		.para_list[0] = 0x77,
 	},
 #if WITH_DSC
 	.dsc_params = {
