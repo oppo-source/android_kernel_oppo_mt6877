@@ -1173,16 +1173,25 @@ void mtk_crtc_prepare_dual_pipe(struct mtk_drm_crtc *mtk_crtc)
 			struct mtk_ddp_comp *comp;
 
 			comp = kzalloc(sizeof(*comp), GFP_KERNEL);
+			if (comp == NULL) {
+				DDPFUNC("%s: kzalloc fail!\n", __func__);
+				continue;
+			}
 			comp->id = comp_id;
 			mtk_crtc->dual_pipe_ddp_ctx.ddp_comp[i][j] = comp;
 			continue;
 		}
 
-		comp = priv->ddp_comp[comp_id];
-		mtk_crtc->dual_pipe_ddp_ctx.ddp_comp[i][j] = comp;
-		comp->mtk_crtc = mtk_crtc;
+		if (comp != NULL) {
+			comp = priv->ddp_comp[comp_id];
+			mtk_crtc->dual_pipe_ddp_ctx.ddp_comp[i][j] = comp;
+			comp->mtk_crtc = mtk_crtc;
+		}
 	}
 
+	if (comp == NULL) {
+		return;
+	}
 	/*4k 30 use DISP_MERGE1, 4k 60 use DSC*/
 	if ((drm_crtc_index(&mtk_crtc->base) == 1) &&
 		(crtc->state->adjusted_mode.vrefresh == 30)) {
@@ -7163,6 +7172,9 @@ void mtk_drm_fake_vsync_init(struct drm_crtc *crtc)
 		kfree(fake_vsync);
 		return;
 	}
+
+	if(fake_vsync == NULL)
+		return;
 
 	snprintf(name, len, "mtk_drm_fake_vsync:%d", drm_crtc_index(crtc));
 	fake_vsync->fvsync_task = kthread_create(mtk_drm_fake_vsync_kthread,
