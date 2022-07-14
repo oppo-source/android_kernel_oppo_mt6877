@@ -2685,7 +2685,9 @@ page_owner=on loop.max_part=7";
 			<0 0>,
 			<0 0>;
 		#endif
-
+	/* Reference clock control mode */
+	/* SW mode: 0, Half-HW mode: 1, HW mode: 2 */
+		mediatek,refclk_ctrl = <2>;
 		vcc-supply = <&mt_pmic_vemc_ldo_reg>;
 		vccq2-supply = <&mt_pmic_vufs_ldo_reg>;
 	};
