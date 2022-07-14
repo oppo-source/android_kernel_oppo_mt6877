@@ -361,14 +361,25 @@ static int mtk_extcon_tcpc_notifier(struct notifier_block *nb,
 				noti->typec_state.new_state);
 
 #ifdef CONFIG_MTK_USB_TYPEC_U3_MUX
-		if ((noti->typec_state.new_state == TYPEC_ATTACHED_SRC ||
-			noti->typec_state.new_state == TYPEC_ATTACHED_SNK ||
+		if ((noti->typec_state.new_state == TYPEC_ATTACHED_SNK ||
 			noti->typec_state.new_state == TYPEC_ATTACHED_NORP_SRC ||
 			noti->typec_state.new_state == TYPEC_ATTACHED_CUSTOM_SRC)) {
 			if (noti->typec_state.polarity == 0)
 				usb3_switch_set(TYPEC_ORIENTATION_REVERSE);
 			else
 				usb3_switch_set(TYPEC_ORIENTATION_NORMAL);
+		} else if (noti->typec_state.new_state == TYPEC_ATTACHED_SRC) {
+			if (g_extcon->support_u3) {
+				if (noti->typec_state.polarity == 0)
+					usb3_switch_set(TYPEC_ORIENTATION_REVERSE);
+				else
+					usb3_switch_set(TYPEC_ORIENTATION_NORMAL);
+			} else {
+				if (noti->typec_state.polarity == 0)
+					usb3_switch_set(TYPEC_ORIENTATION_NORMAL);
+				else
+					usb3_switch_set(TYPEC_ORIENTATION_REVERSE);
+			}
 		} else if (noti->typec_state.new_state == TYPEC_UNATTACHED) {
 			usb3_switch_set(TYPEC_ORIENTATION_NONE);
 		}
@@ -628,6 +639,10 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	extcon->extcon_wq = create_singlethread_workqueue("extcon_usb");
 	if (!extcon->extcon_wq)
 		return -ENOMEM;
+
+	extcon->support_u3 = !of_property_read_bool(dev->of_node, "not_support_u3");
+	if (!extcon->support_u3)
+		dev_info(dev, "platform does not support U3\n");
 
 	extcon->c_role = DUAL_PROP_DR_DEVICE;
 

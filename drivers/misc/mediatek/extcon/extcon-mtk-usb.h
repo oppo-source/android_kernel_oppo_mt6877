@@ -9,6 +9,7 @@ struct mtk_extcon_info {
 	struct usb_role_switch *role_sw;
 	unsigned int c_role; /* current data role */
 	struct workqueue_struct *extcon_wq;
+	bool support_u3;
 	struct regulator *vbus;
 	struct gpio_desc *id_gpiod;
 	unsigned int vbus_vol;
