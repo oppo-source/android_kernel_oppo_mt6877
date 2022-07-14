@@ -78,7 +78,8 @@ struct mt6360_platform_data {
 };
 
 #if defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6833) \
-|| defined(CONFIG_MACH_MT6893)
+|| defined(CONFIG_MACH_MT6893) || defined(CONFIG_MACH_MT6785) \
+|| defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6873)
 /* define charger consumer */
 static struct charger_consumer *flashlight_charger_consumer;
 #define CHARGER_SUPPLY_NAME "charger_port1"
@@ -358,7 +359,8 @@ static int mt6360_set_scenario(int scenario)
 		if (!is_decrease_voltage) {
 			pr_info("Decrease voltage level.\n");
 #if defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6833) \
-|| defined(CONFIG_MACH_MT6893)
+|| defined(CONFIG_MACH_MT6893) || defined(CONFIG_MACH_MT6785) \
+|| defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6873)
 			charger_manager_enable_high_voltage_charging(
 				flashlight_charger_consumer, false);
 #else
@@ -370,7 +372,8 @@ static int mt6360_set_scenario(int scenario)
 		if (is_decrease_voltage) {
 			pr_info("Increase voltage level.\n");
 #if defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6833) \
-|| defined(CONFIG_MACH_MT6893)
+|| defined(CONFIG_MACH_MT6893) || defined(CONFIG_MACH_MT6785) \
+|| defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6873)
 			charger_manager_enable_high_voltage_charging(
 				flashlight_charger_consumer, true);
 #else
@@ -661,7 +664,8 @@ static int mt6360_release(void)
 	if (fd_use_count == 0 && is_decrease_voltage) {
 		pr_info("Increase voltage level.\n");
 #if defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6833) \
-|| defined(CONFIG_MACH_MT6893)
+|| defined(CONFIG_MACH_MT6893) || defined(CONFIG_MACH_MT6785) \
+|| defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6873)
 			charger_manager_enable_high_voltage_charging(
 				flashlight_charger_consumer, true);
 #else
@@ -852,7 +856,8 @@ static int mt6360_probe(struct platform_device *pdev)
 				MT6360_HW_TIMEOUT, MT6360_HW_TIMEOUT + 200) < 0)
 		pr_info("Failed to set strobe timeout.\n");
 #if defined(CONFIG_MACH_MT6877) || defined(CONFIG_MACH_MT6833) \
-|| defined(CONFIG_MACH_MT6893)
+|| defined(CONFIG_MACH_MT6893) || defined(CONFIG_MACH_MT6785) \
+|| defined(CONFIG_MACH_MT6885) || defined(CONFIG_MACH_MT6873)
 	/* get charger consumer manager */
 	flashlight_charger_consumer = charger_manager_get_by_name(
 			&flashlight_dev_ch1->dev, CHARGER_SUPPLY_NAME);
