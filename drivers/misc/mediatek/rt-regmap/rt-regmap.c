@@ -943,6 +943,8 @@ static int get_parameters(char *buf, unsigned long *param, int num_of_par)
 	char *token;
 	int base = 0, cnt = 0;
 
+	token = strsep(&buf, " ");
+
 	for (cnt = 0; cnt < num_of_par; cnt++) {
 		if (token != NULL) {
 			if ((token[1] == 'x') || (token[1] == 'X'))
