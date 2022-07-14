@@ -1614,7 +1614,7 @@ static ssize_t clk_buf_heater_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
 	int len = 0;
-	uint32_t heater;
+	uint32_t heater = 0;
 
 	pmic_read_interface(PMIC_RG_XO_HEATER_SEL_ADDR, &heater,
 		PMIC_RG_XO_HEATER_SEL_MASK,
