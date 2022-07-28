@@ -967,6 +967,9 @@ s32 gtp_read_version(struct i2c_client *client, u16 *version)
 		return ret;
 	}
 
+	if (!version)
+		return ret;
+
 	if (version)
 		*version = (buf[7] << 8) | buf[6];
 
