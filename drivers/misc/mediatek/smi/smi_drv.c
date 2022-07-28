@@ -458,7 +458,7 @@ EXPORT_SYMBOL_GPL(smi_bwl_update);
 void smi_ostd_update(const struct plist_head *head, const char *user)
 {
 	struct mm_qos_request *req;
-	u32 larb, port, ostd;
+	u32 larb = 0, port, ostd;
 
 	if (plist_head_empty(head))
 		return;
