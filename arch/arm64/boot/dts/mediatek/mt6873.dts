@@ -2785,8 +2785,13 @@ page_owner=on loop.max_part=7";
 				  <3   0 0>,  /* rtos */
 				  <4 200 1>,  /* speaker */
 				  <5  0 0>,  /* vcore */
-				  <6 200 1>,  /* barge in */
+				  <6 135 1>,  /* barge in */
 				  <7  10 1>,  /* vow dump */
+				  <8  80 1>,	/* vow vendor M */
+				  <9  43 1>,	/* vow vendor A */
+				  <10  22 1>,	/* vow vendor G */
+				  <11  20 1>,	/* vow dual mic */
+				  <12 135 1>,	/* vow dual mic barge in */
 				  <13 200 0>; /* ultrasound */
 
 		secure_dump = "disable"; /* disabled in default */
