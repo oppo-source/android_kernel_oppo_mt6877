@@ -163,7 +163,7 @@ static enum IMGSENSOR_RETURN regulator_init(void *pinstance)
 	struct REGULATOR *preg = (struct REGULATOR *)pinstance;
 	struct device            *pdevice;
 	struct device_node       *pof_node;
-	int j, i;
+	int j, i, ret = 0;
 	char str_regulator_name[LENGTH_FOR_SNPRINTF];
 
 	pdevice  = gimgsensor_device;
@@ -181,11 +181,14 @@ static enum IMGSENSOR_RETURN regulator_init(void *pinstance)
 		j < IMGSENSOR_SENSOR_IDX_MAX_NUM;
 		j++) {
 		for (i = 0; i < REGULATOR_TYPE_MAX_NUM; i++) {
-			snprintf(str_regulator_name,
+			ret = snprintf(str_regulator_name,
 					sizeof(str_regulator_name),
 					"cam%d_%s",
 					j,
 					regulator_control[i].pregulator_type);
+			if (ret < 0)
+				pr_info("NOTICE: %s, snprintf err, %d\n",
+					__func__, ret);
 			preg->pregulator[j][i] =
 			    regulator_get_optional(
 				pdevice, str_regulator_name);
@@ -242,8 +245,7 @@ static enum IMGSENSOR_RETURN regulator_set(
 	if (pin > IMGSENSOR_HW_PIN_DOVDD   ||
 	    pin < IMGSENSOR_HW_PIN_AVDD    ||
 	    pin_state < IMGSENSOR_HW_PIN_STATE_LEVEL_0 ||
-	    pin_state >= IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH ||
-	    sensor_idx < 0)
+	    pin_state >= IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH)
 		return IMGSENSOR_RETURN_ERROR;
 
 	reg_type_offset = REGULATOR_TYPE_VCAMA;
