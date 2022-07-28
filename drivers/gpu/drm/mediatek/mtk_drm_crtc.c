@@ -1125,7 +1125,7 @@ void mtk_crtc_prepare_dual_pipe(struct mtk_drm_crtc *mtk_crtc)
 {
 	int i, j;
 	enum mtk_ddp_comp_id comp_id;
-	struct mtk_ddp_comp *comp;
+	struct mtk_ddp_comp *comp = NULL;
 	struct device *dev = mtk_crtc->base.dev->dev;
 	struct mtk_drm_private *priv = mtk_crtc->base.dev->dev_private;
 	struct drm_crtc *crtc = &mtk_crtc->base;
