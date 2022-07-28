@@ -1589,6 +1589,11 @@ firmware_class.path=/vendor/firmware loop.max_part=7";
 			clock-names = "GCE", "GCE_TIMER";
 		};
 
+		ap_ccif2@1023c000 {
+			compatible = "mediatek,ap_ccif2";
+			reg = <0 0x1023c000 0 0x1000>;
+		};
+
 		md_ccif4@1024d000 {
 			compatible = "mediatek,md_ccif4";
 			reg = <0 0x1024d000 0 0x1000>;
