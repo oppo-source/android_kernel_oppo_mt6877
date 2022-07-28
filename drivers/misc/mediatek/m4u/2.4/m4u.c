@@ -2356,8 +2356,7 @@ static long MTK_M4U_ioctl(struct file *filp,
 				m4u_cache_data.port);
 			return -EFAULT;
 		}
-		if (m4u_cache_data.mva < 0 ||
-			(m4u_cache_data.mva >> MVA_BLOCK_SIZE_ORDER)
+		if ((m4u_cache_data.mva >> MVA_BLOCK_SIZE_ORDER)
 				> MVA_MAX_BLOCK_NR) {
 			M4UMSG(
 				"MTK_M4U_T_CACHE_SYNC, mva %d is invalid\n",
