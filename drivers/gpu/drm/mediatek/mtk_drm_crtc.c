@@ -1125,7 +1125,7 @@ void mtk_crtc_prepare_dual_pipe(struct mtk_drm_crtc *mtk_crtc)
 {
 	int i, j;
 	enum mtk_ddp_comp_id comp_id;
-	struct mtk_ddp_comp *comp = NULL;
+	struct mtk_ddp_comp *comp;
 	struct device *dev = mtk_crtc->base.dev->dev;
 	struct mtk_drm_private *priv = mtk_crtc->base.dev->dev_private;
 	struct drm_crtc *crtc = &mtk_crtc->base;
@@ -1170,28 +1170,23 @@ void mtk_crtc_prepare_dual_pipe(struct mtk_drm_crtc *mtk_crtc)
 			return;
 		}
 		if (mtk_ddp_comp_get_type(comp_id) == MTK_DISP_VIRTUAL) {
-			struct mtk_ddp_comp *comp;
+			struct mtk_ddp_comp *comp_l;
 
-			comp = kzalloc(sizeof(*comp), GFP_KERNEL);
-			if (comp == NULL) {
+			comp_l = kzalloc(sizeof(*comp_l), GFP_KERNEL);
+			if (comp_l == NULL) {
 				DDPFUNC("%s: kzalloc fail!\n", __func__);
 				continue;
 			}
-			comp->id = comp_id;
-			mtk_crtc->dual_pipe_ddp_ctx.ddp_comp[i][j] = comp;
+			comp_l->id = comp_id;
+			mtk_crtc->dual_pipe_ddp_ctx.ddp_comp[i][j] = comp_l;
 			continue;
 		}
 
-		if (comp != NULL) {
-			comp = priv->ddp_comp[comp_id];
-			mtk_crtc->dual_pipe_ddp_ctx.ddp_comp[i][j] = comp;
-			comp->mtk_crtc = mtk_crtc;
-		}
+		comp = priv->ddp_comp[comp_id];
+		mtk_crtc->dual_pipe_ddp_ctx.ddp_comp[i][j] = comp;
+		comp->mtk_crtc = mtk_crtc;
 	}
 
-	if (comp == NULL) {
-		return;
-	}
 	/*4k 30 use DISP_MERGE1, 4k 60 use DSC*/
 	if ((drm_crtc_index(&mtk_crtc->base) == 1) &&
 		(crtc->state->adjusted_mode.vrefresh == 30)) {
