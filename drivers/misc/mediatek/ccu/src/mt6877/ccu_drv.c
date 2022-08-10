@@ -129,7 +129,7 @@ static uint32_t get_checksum(uint8_t *data, uint32_t size)
 	for (i = 0, val = 0; i < sz; ++i)
 		val += ptr[i];
 	for (i = size & ~3, tv = 0; i < size; ++i)
-		tv += ((uint32_t)(data[i])) << ((i & ~3) << 3);
+		tv += ((uint32_t)(data[i])) << ((i & 3) << 3);
 	val = (val + tv) ^ CCU_MAGIC_CHK;
 
 	return val;
