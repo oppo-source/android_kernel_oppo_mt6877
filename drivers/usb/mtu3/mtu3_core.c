@@ -245,7 +245,8 @@ static void mtu3_regs_init(struct mtu3 *mtu)
 		mtu3_clrbits(mbase, U3D_LINK_POWER_CONTROL,
 				SW_U1_REQUEST_ENABLE | SW_U2_REQUEST_ENABLE);
 		/* enable accept LGO_U1/U2 link command from host */
-		if (!of_find_compatible_node(NULL, NULL, "mediatek,MT6893")) {
+		if (!(of_find_compatible_node(NULL, NULL, "mediatek,MT6893")
+			|| of_find_compatible_node(NULL, NULL, "mediatek,MT6853"))) {
 			dev_info(mtu->ssusb->dev, "enable accept_lgo\n");
 			mtu3_setbits(mbase, U3D_LINK_POWER_CONTROL,
 				SW_U1_ACCEPT_ENABLE | SW_U2_ACCEPT_ENABLE);
