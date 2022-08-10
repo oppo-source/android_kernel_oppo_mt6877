@@ -7704,7 +7704,7 @@ unlock:
 		return best_energy_cpu;
 #endif
 
-	return best_energy_cpu;
+	return prev_cpu;
 
 fail:
 	rcu_read_unlock();
