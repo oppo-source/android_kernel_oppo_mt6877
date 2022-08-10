@@ -165,5 +165,19 @@ int main(void)
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
   DEFINE(TRAMP_VALIAS,		TRAMP_VALIAS);
 #endif
+#ifdef CONFIG_OPLUS_SECURE_GUARD
+#ifdef CONFIG_OPLUS_ROOT_CHECK
+  DEFINE(PROOT_TSK_CRED,	offsetof(struct task_struct, cred));
+  DEFINE(PROOT_CRED_UID,	offsetof(struct cred, uid));
+  DEFINE(PROOT_CRED_EUID,	offsetof(struct cred, euid));
+  DEFINE(PROOT_CRED_FSUID,	offsetof(struct cred, fsuid));
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+  DEFINE(PROOT_THREAD_ADDR_LIMIT,	offsetof(struct task_struct, thread_info.addr_limit));
+#else
+  DEFINE(PROOT_THREAD_TSK,	offsetof(struct thread_info,task));
+  DEFINE(PROOT_THREAD_ADDR_LIMIT,	offsetof(struct thread_info, addr_limit));
+#endif
+#endif /* CONFIG_OPLUS_ROOT_CHECK */
+#endif /* CONFIG_OPLUS_SECURE_GUARD */
   return 0;
 }

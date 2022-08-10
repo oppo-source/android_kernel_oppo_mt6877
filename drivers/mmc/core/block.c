@@ -1228,9 +1228,11 @@ static int mmc_blk_ioctl(struct block_device *bdev, fmode_t mode,
 		mmc_blk_put(md);
 		return ret;
 	case MMC_IOC_MULTI_CMD:
+#ifndef OPLUS_FEATURE_STORAGE_TOOL
 		ret = mmc_blk_check_blkdev(bdev);
 		if (ret)
 			return ret;
+#endif
 		md = mmc_blk_get(bdev->bd_disk);
 		if (!md)
 			return -EINVAL;
@@ -1461,6 +1463,9 @@ static int card_busy_detect(struct mmc_card *card, unsigned int timeout_ms,
 			pr_err("%s: Card stuck in programming state! %s %s\n",
 				mmc_hostname(card->host),
 				req->rq_disk->disk_name, __func__);
+#ifdef OPLUS_FEATURE_STORAGE
+			card->host->card_stuck_in_programing_status = true;
+#endif
 			return -ETIMEDOUT;
 		}
 
@@ -2684,7 +2689,7 @@ static struct mmc_cmdq_req *mmc_blk_cmdq_rw_prep(
 	 * call it in CQHCI for safe, SWcmdq will do this in
 	 * mmc_blk_swcq_issue_rw_rq().
 	 */
-#ifndef CONFIG_MTK_EMMC_CQ_SUPPORT
+#ifdef CONFIG_MTK_EMMC_HW_CQ
 	mmc_crypto_prepare_req(mqrq);
 #endif
 #ifdef MMC_CQHCI_DEBUG
@@ -4599,8 +4604,10 @@ static int mmc_blk_probe(struct mmc_card *card)
 	/*
 	 * Check that the card supports the command class(es) we need.
 	 */
+#ifndef OPLUS_FEATURE_STORAGE
 	if (!(card->csd.cmdclass & CCC_BLOCK_READ))
 		return -ENODEV;
+#endif
 
 	mmc_fixup_device(card, mmc_blk_fixups);
 
@@ -4738,10 +4745,12 @@ static int mmc_blk_suspend(struct device *dev)
 	 * suspend.
 	 */
 	if (md) {
+		mmc_get_card(card);
 		ret = mmc_blk_part_switch(card, md->part_type);
 		if (ret)
 			pr_info("%s: error %d during suspend\n",
 				md->disk->disk_name, ret);
+		mmc_put_card(card);
 	}
 out:
 		return ret;

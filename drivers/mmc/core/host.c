@@ -372,6 +372,9 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 
 	dev_set_name(&host->class_dev, "mmc%d", host->index);
 
+#ifdef OPLUS_FEATURE_STORAGE
+	host->card_stuck_in_programing_status = false;
+#endif
 	host->parent = dev;
 	host->class_dev.parent = dev;
 	host->class_dev.class = &mmc_host_class;
@@ -388,6 +391,10 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 	INIT_DELAYED_WORK(&host->detect, mmc_rescan);
 	INIT_DELAYED_WORK(&host->sdio_irq_work, sdio_irq_work);
 	setup_timer(&host->retune_timer, mmc_retune_timer, (unsigned long)host);
+
+#ifdef OPLUS_FEATURE_STORAGE
+	host->detect_change_retry = 5;
+#endif
 
 	/*
 	 * By default, hosts do not support SGIO or large requests.

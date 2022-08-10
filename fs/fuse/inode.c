@@ -49,6 +49,12 @@ MODULE_PARM_DESC(max_user_congthresh,
  "Global limit for the maximum congestion threshold an "
  "unprivileged user can set");
 
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+static bool shortcircuit = true;
+module_param(shortcircuit, bool, 0644);
+MODULE_PARM_DESC(shortcircuit, "Enable or disable fuse shortcircuit. Default: y/Y/1");
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
+
 #define FUSE_SUPER_MAGIC 0x65735546
 
 #define FUSE_DEFAULT_BLKSIZE 512
@@ -207,6 +213,7 @@ void fuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	bool is_wb = fc->writeback_cache;
+	bool lowlevel_is_newer;
 	loff_t oldsize;
 	struct timespec old_mtime;
 
@@ -221,16 +228,23 @@ void fuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
 	fuse_change_attributes_common(inode, attr, attr_valid);
 
 	oldsize = inode->i_size;
+	if (is_wb &&
+	    ((attr->mtime > old_mtime.tv_sec)
+	  || ((attr->mtime == old_mtime.tv_sec) &&
+	      (attr->mtimensec > old_mtime.tv_nsec))))
+		lowlevel_is_newer = true;
+	else
+		lowlevel_is_newer = false;
 	/*
 	 * In case of writeback_cache enabled, the cached writes beyond EOF
 	 * extend local i_size without keeping userspace server in sync. So,
 	 * attr->size coming from server can be stale. We cannot trust it.
 	 */
-	if (!is_wb || !S_ISREG(inode->i_mode))
+	if (!is_wb || !S_ISREG(inode->i_mode) || lowlevel_is_newer)
 		i_size_write(inode, attr->size);
 	spin_unlock(&fc->lock);
 
-	if (!is_wb && S_ISREG(inode->i_mode)) {
+	if ((!is_wb || lowlevel_is_newer) && S_ISREG(inode->i_mode)) {
 		bool inval = false;
 
 		if (oldsize != attr->size) {
@@ -584,6 +598,7 @@ static int fuse_show_options(struct seq_file *m, struct dentry *root)
 static void fuse_iqueue_init(struct fuse_iqueue *fiq)
 {
 	memset(fiq, 0, sizeof(struct fuse_iqueue));
+	spin_lock_init(&fiq->lock);
 	init_waitqueue_head(&fiq->waitq);
 	INIT_LIST_HEAD(&fiq->pending);
 	INIT_LIST_HEAD(&fiq->interrupts);
@@ -910,6 +925,15 @@ static void process_init_reply(struct fuse_conn *fc, struct fuse_req *req)
 				fc->async_dio = 1;
 			if (arg->flags & FUSE_WRITEBACK_CACHE)
 				fc->writeback_cache = 1;
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+			if (arg->flags & FUSE_SHORTCIRCUIT || fc->writeback_cache) {
+				/** an ugly way to determine FuseDaemon by writeback_cache
+				 *  since currently only FuseDaemon enable WBC
+				 */
+				fc->shortcircuit_io = shortcircuit ? 1 : 0;
+				pr_info("fuse sct flag: %d\n", shortcircuit);
+			}
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 			if (arg->flags & FUSE_PARALLEL_DIROPS)
 				fc->parallel_dirops = 1;
 			if (arg->flags & FUSE_HANDLE_KILLPRIV)
@@ -951,7 +975,12 @@ static void fuse_send_init(struct fuse_conn *fc, struct fuse_req *req)
 		FUSE_FLOCK_LOCKS | FUSE_HAS_IOCTL_DIR | FUSE_AUTO_INVAL_DATA |
 		FUSE_DO_READDIRPLUS | FUSE_READDIRPLUS_AUTO | FUSE_ASYNC_DIO |
 		FUSE_WRITEBACK_CACHE | FUSE_NO_OPEN_SUPPORT |
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+		FUSE_PARALLEL_DIROPS | FUSE_HANDLE_KILLPRIV | FUSE_POSIX_ACL |
+		FUSE_SHORTCIRCUIT;
+#else
 		FUSE_PARALLEL_DIROPS | FUSE_HANDLE_KILLPRIV | FUSE_POSIX_ACL;
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 	req->in.h.opcode = FUSE_INIT;
 	req->in.numargs = 1;
 	req->in.args[0].size = sizeof(*arg);
@@ -1167,6 +1196,10 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 
 	fuse_send_init(fc, init_req);
 
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+	acm_fuse_init_cache();
+#endif
+
 	return 0;
 
  err_unlock:
@@ -1198,6 +1231,9 @@ static void fuse_sb_destroy(struct super_block *sb)
 	struct fuse_conn *fc = get_fuse_conn_super(sb);
 
 	if (fc) {
+#ifdef CONFIG_OPLUS_FEATURE_ACM
+		acm_fuse_free_cache();
+#endif
 		fuse_send_destroy(fc);
 
 		fuse_abort_conn(fc);

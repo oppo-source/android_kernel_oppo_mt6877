@@ -25,9 +25,16 @@
 #ifdef CONFIG_SND_SOC_MT6660
 #include "../../codecs/mt6660.h"
 #endif /* CONFIG_SND_SOC_MT6660 */
+#ifdef CONFIG_SND_SOC_RT5512
+#include "../../codecs/rt5512.h"
+#endif /* CONFIG_SND_SOC_RT5512 */
 
 #ifdef CONFIG_SND_SOC_TFA9874
 #include "../../codecs/tfa98xx/inc/tfa98xx_ext.h"
+#endif
+
+#ifdef CONFIG_SND_SOC_AA012
+#include "../../codecs/aa012/k6877v1_64_alpha/tfa98xx/inc/tfa98xx_ext.h"
 #endif
 
 #ifdef CONFIG_SND_SOC_AW87339
@@ -60,6 +67,14 @@ static struct mtk_spk_i2c_ctrl mtk_spk_list[MTK_SPK_TYPE_NUM] = {
 		.codec_name = "MT6660_MT_0",
 	},
 #endif /* CONFIG_SND_SOC_MT6660 */
+#ifdef CONFIG_SND_SOC_RT5512
+	[MTK_SPK_MEDIATEK_RT5512] = {
+		.i2c_probe = rt5512_i2c_probe,
+		.i2c_remove = rt5512_i2c_remove,
+		.codec_dai_name = "rt5512-aif",
+		.codec_name = "RT5512_MT_0",
+	},
+#endif /* CONFIG_SND_SOC_RT5512 */
 
 #ifdef CONFIG_SND_SOC_TFA9874
 	[MTK_SPK_NXP_TFA98XX] = {
@@ -68,7 +83,16 @@ static struct mtk_spk_i2c_ctrl mtk_spk_list[MTK_SPK_TYPE_NUM] = {
 		.codec_dai_name = "tfa98xx-aif",
 		.codec_name = "tfa98xx",
 	},
-#endif /* CONFIG_SND_SOC_MT6660 */
+#endif /* CONFIG_SND_SOC_TFA9874 */
+
+#ifdef CONFIG_SND_SOC_AA012
+	[MTK_SPK_NXP_TFA98XX] = {
+		.i2c_probe = tfa98xx_i2c_probe,
+		.i2c_remove = tfa98xx_i2c_remove,
+		.codec_dai_name = "tfa98xx-aif-6-34",
+		.codec_name = "tfa98xx.6-0034",
+	},
+#endif /* CONFIG_SND_SOC_TFA9874 */
 };
 
 static int mtk_spk_i2c_probe(struct i2c_client *client,
@@ -461,7 +485,11 @@ MODULE_DEVICE_TABLE(of, mtk_spk_match_table);
 
 static struct i2c_driver mtk_spk_i2c_driver = {
 	.driver = {
-		.name = "speaker_amp",
+//#ifdef OPLUS_ARCH_EXTENDS
+		.name = "tfa98xx",
+//#else
+//		.name = "speaker_amp",
+//#endif
 		.owner = THIS_MODULE,
 		.of_match_table = of_match_ptr(mtk_spk_match_table),
 	},

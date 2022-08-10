@@ -55,6 +55,8 @@ inline unsigned int freq_util(unsigned long util);
 #define LB_EAS_AFFINE   (0x18  << LB_POLICY_SHIFT)
 #define LB_EAS_LB       (0x28  << LB_POLICY_SHIFT)
 #define LB_THERMAL       (0x48  << LB_POLICY_SHIFT)
+#define LB_UX_BOOST      (0x88  << LB_POLICY_SHIFT)
+#define LB_UX_LIMIT      (0xA8  << LB_POLICY_SHIFT)
 
 #define MIGR_LOAD_BALANCE      1
 #define MIGR_UP_MIGRATE        2

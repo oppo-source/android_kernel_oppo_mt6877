@@ -733,8 +733,9 @@ int mtk_emimpu_free_region(struct emimpu_region_t *rg_info)
 	if (rg_info && rg_info->apc) {
 		kfree(rg_info->apc);
 		return 0;
-	} else
-		return -EINVAL;
+	}
+	pr_info("%s: %p is NULL", __func__, __builtin_return_address(0));
+	return -EINVAL;
 }
 EXPORT_SYMBOL(mtk_emimpu_free_region);
 

@@ -417,8 +417,11 @@ int drm_mode_rmfb(struct drm_device *dev,
 		INIT_WORK_ONSTACK(&arg.work, drm_mode_rmfb_work_fn);
 		INIT_LIST_HEAD(&arg.fbs);
 		list_add_tail(&fb->filp_head, &arg.fbs);
-
-		schedule_work(&arg.work);
+		//#ifdef OPLUS_BUG_STABILITY
+		queue_work(system_highpri_wq, &arg.work);
+		//#else
+		//schedule_work(&arg.work);
+		//#endif
 		flush_work(&arg.work);
 		destroy_work_on_stack(&arg.work);
 	} else

@@ -128,7 +128,6 @@ static unsigned int drcc7_EdgeSel;
 #ifndef CONFIG_FPGA_EARLY_PORTING
 #ifdef CONFIG_OF_RESERVED_MEM
 
-#ifdef PTP3_STATUS_PROBE_DUMP
 static char *drcc_buf;
 static unsigned long long drcc_mem_size;
 void drcc_save_memory_info(char *buf, unsigned long long ptp3_mem_size)
@@ -263,7 +262,6 @@ int drcc_reserve_memory_dump(char *buf, unsigned long long ptp3_mem_size,
 
 	return 0;
 }
-#endif
 
 #endif
 #endif
@@ -1012,11 +1010,15 @@ static int EventCount_proc_show(struct seq_file *m, void *v)
 
 static int drcc_cfg_proc_show(struct seq_file *m, void *v)
 {
-	unsigned int value = 0;
+	unsigned int value = 0, drcc_n = 0, temp = 0;
+	const unsigned int drcc_group = DRCC_GROUP_CFG;
 
-	value = drcc_smc_handle(DRCC_GROUP_CFG, 0, 0);
+	value = drcc_smc_handle(drcc_group, 0, 0);
 
-	seq_printf(m, "%08x\n", value);
+	for (drcc_n = 0; drcc_n < DRCC_NUM; drcc_n++)
+		temp |= (((value & (0x1 << drcc_n)) >> drcc_n) << (drcc_n * 4));
+
+	seq_printf(m, "%08x\n", temp);
 
 	return 0;
 }
@@ -1391,26 +1393,41 @@ int drcc_probe(struct platform_device *pdev)
 #endif /* CONFIG_OF */
 
 #ifdef CONFIG_OF_RESERVED_MEM
-#ifdef PTP3_STATUS_PROBE_DUMP
 	/* dump reg status into PICACHU dram for DB */
 	if (drcc_buf != NULL) {
 		drcc_reserve_memory_dump(drcc_buf, drcc_mem_size,
 			DRCC_TRIGGER_STAGE_PROBE);
 	}
-#endif /* PTP3_STATUS_PROBE_DUMP */
 #endif /* CONFIG_OF_RESERVED_MEM */
-
 #endif /* CONFIG_FPGA_EARLY_PORTING */
 	return 0;
 }
 
 int drcc_suspend(struct platform_device *pdev, pm_message_t state)
 {
+#ifndef CONFIG_FPGA_EARLY_PORTING
+#ifdef CONFIG_OF_RESERVED_MEM
+	/* dump reg status into PICACHU dram for DB */
+	if (drcc_buf != NULL) {
+		drcc_reserve_memory_dump(drcc_buf+0x1000, drcc_mem_size,
+			DRCC_TRIGGER_STAGE_SUSPEND);
+	}
+#endif /* CONFIG_OF_RESERVED_MEM */
+#endif /* CONFIG_FPGA_EARLY_PORTING */
 	return 0;
 }
 
 int drcc_resume(struct platform_device *pdev)
 {
+#ifndef CONFIG_FPGA_EARLY_PORTING
+#ifdef CONFIG_OF_RESERVED_MEM
+	/* dump reg status into PICACHU dram for DB */
+	if (drcc_buf != NULL) {
+		drcc_reserve_memory_dump(drcc_buf+0x2000, drcc_mem_size,
+			DRCC_TRIGGER_STAGE_RESUME);
+	}
+#endif /* CONFIG_OF_RESERVED_MEM */
+#endif /* CONFIG_FPGA_EARLY_PORTING */
 	return 0;
 }
 

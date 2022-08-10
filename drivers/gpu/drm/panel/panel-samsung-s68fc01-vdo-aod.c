@@ -304,13 +304,13 @@ static int lcm_unprepare(struct drm_panel *panel)
 	usleep_range(10 * 1000, 15 * 1000);
 	devm_gpiod_put(ctx->dev, ctx->reset_gpio);
 	usleep_range(10 * 1000, 15 * 1000);
-
+#ifndef CONFIG_RT4831A_I2C
 	ctx->bias_gpio =
 	devm_gpiod_get(ctx->dev, "bias", GPIOD_OUT_HIGH);
 	gpiod_set_value(ctx->bias_gpio, 0);
 	usleep_range(10 * 1000, 15 * 1000);
 	devm_gpiod_put(ctx->dev, ctx->bias_gpio);
-
+#endif
 	ctx->hbm_en = false;
 
 	return 0;
@@ -323,12 +323,13 @@ static int lcm_panel_poweron(struct drm_panel *panel)
 
 	if (ctx->prepared)
 		return 0;
-
+#ifndef CONFIG_RT4831A_I2C
 	usleep_range(10 * 1000, 10 * 1000);
 	ctx->bias_gpio = devm_gpiod_get(ctx->dev,
 		"bias", GPIOD_OUT_HIGH);
 	gpiod_set_value(ctx->bias_gpio, 1);
 	devm_gpiod_put(ctx->dev, ctx->bias_gpio);
+#endif
 	usleep_range(10 * 1000, 10 * 1000);
 	ctx->reset_gpio = devm_gpiod_get(ctx->dev, "reset", GPIOD_OUT_HIGH);
 	gpiod_set_value(ctx->reset_gpio, 1);
@@ -761,7 +762,6 @@ static int panel_doze_post_disp_on(struct drm_panel *panel,
 	int cmd = 0;
 
 #ifdef VENDOR_EDIT
-/* Hujie@PSW.MM.DisplayDriver.AOD, 2019/12/10, add for keylog*/
 	pr_info("debug for lcm %s\n", __func__);
 #endif
 
@@ -952,6 +952,7 @@ static int lcm_probe(struct mipi_dsi_device *dsi)
 		return PTR_ERR(ctx->reset_gpio);
 	}
 	devm_gpiod_put(dev, ctx->reset_gpio);
+#ifndef CONFIG_RT4831A_I2C
 	ctx->bias_gpio = devm_gpiod_get(dev, "bias", GPIOD_OUT_HIGH);
 	if (IS_ERR(ctx->bias_gpio)) {
 		dev_info(dev, "cannot get bias-gpios 0 %ld\n",
@@ -959,7 +960,7 @@ static int lcm_probe(struct mipi_dsi_device *dsi)
 		return PTR_ERR(ctx->bias_gpio);
 	}
 	devm_gpiod_put(dev, ctx->bias_gpio);
-
+#endif
 	ctx->prepared = true;
 	ctx->enabled = true;
 

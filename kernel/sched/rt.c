@@ -1423,9 +1423,15 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 
 	schedtune_enqueue_task(p, cpu_of(rq));
 
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	if (flags & ENQUEUE_WAKEUP) {
+		rt_se->timeout = 0;
+		trace_sched_blocked_reason(p);
+	}
+#else
 	if (flags & ENQUEUE_WAKEUP)
 		rt_se->timeout = 0;
-
+#endif
 	enqueue_rt_entity(rt_se, flags);
 	walt_inc_cumulative_runnable_avg(rq, p);
 

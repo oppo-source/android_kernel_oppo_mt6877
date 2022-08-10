@@ -7,6 +7,9 @@
 */
 
 #include "fuse_i.h"
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+#include "fuse_shortcircuit.h"
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 
 #include <linux/pagemap.h>
 #include <linux/slab.h>
@@ -17,9 +20,46 @@
 #include <linux/swap.h>
 #include <linux/falloc.h>
 #include <linux/uio.h>
+#include <mt-plat/mtk_blocktag.h>
 
 static const struct file_operations fuse_direct_io_file_operations;
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+static int fuse_send_open(struct fuse_conn *fc, u64 nodeid, struct file *file,
+			  int opcode, struct fuse_open_out *outargp,
+			  struct file **lower_file)
+{
+	ssize_t ret;
+	struct fuse_open_in inarg;
+	FUSE_ARGS(args);
+	char *iname = NULL;
 
+	memset(&inarg, 0, sizeof(inarg));
+	inarg.flags = file->f_flags & ~(O_CREAT | O_EXCL | O_NOCTTY);
+
+	if (!fc->atomic_o_trunc)
+		inarg.flags &= ~O_TRUNC;
+
+	args.in.h.opcode = opcode;
+	args.in.h.nodeid = nodeid;
+	args.in.numargs = 1;
+	args.in.args[0].size = sizeof(inarg);
+	args.in.args[0].value = &inarg;
+	args.out.numargs = 1;
+	args.out.args[0].size = sizeof(*outargp);
+	args.out.args[0].value = outargp;
+
+	if (opcode == FUSE_OPEN)
+		iname = inode_name(file_inode(file));
+	args.iname = iname;
+
+	ret = fuse_simple_request(fc, &args);
+	if (args.iname)
+		__putname(args.iname);
+	if (args.private_lower_rw_file != NULL)
+		*lower_file = args.private_lower_rw_file;
+	return ret;
+}
+#else
 static int fuse_send_open(struct fuse_conn *fc, u64 nodeid, struct file *file,
 			  int opcode, struct fuse_open_out *outargp)
 {
@@ -28,6 +68,7 @@ static int fuse_send_open(struct fuse_conn *fc, u64 nodeid, struct file *file,
 
 	memset(&inarg, 0, sizeof(inarg));
 	inarg.flags = file->f_flags & ~(O_CREAT | O_EXCL | O_NOCTTY);
+
 	if (!fc->atomic_o_trunc)
 		inarg.flags &= ~O_TRUNC;
 	args.in.h.opcode = opcode;
@@ -41,6 +82,7 @@ static int fuse_send_open(struct fuse_conn *fc, u64 nodeid, struct file *file,
 
 	return fuse_simple_request(fc, &args);
 }
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 
 struct fuse_file *fuse_file_alloc(struct fuse_conn *fc)
 {
@@ -50,6 +92,9 @@ struct fuse_file *fuse_file_alloc(struct fuse_conn *fc)
 	if (unlikely(!ff))
 		return NULL;
 
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	ff->rw_lower_file = NULL;
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 	ff->fc = fc;
 	ff->reserved_req = fuse_request_alloc(0);
 	if (unlikely(!ff->reserved_req)) {
@@ -130,7 +175,12 @@ int fuse_do_open(struct fuse_conn *fc, u64 nodeid, struct file *file,
 		struct fuse_open_out outarg;
 		int err;
 
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+		err = fuse_send_open(fc, nodeid, file, opcode, &outarg,
+				&(ff->rw_lower_file));
+#else
 		err = fuse_send_open(fc, nodeid, file, opcode, &outarg);
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 		if (!err) {
 			ff->fh = outarg.fh;
 			ff->open_flags = outarg.open_flags;
@@ -256,6 +306,9 @@ void fuse_release_common(struct file *file, bool isdir)
 	struct fuse_req *req = ff->reserved_req;
 	int opcode = isdir ? FUSE_RELEASEDIR : FUSE_RELEASE;
 
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	fuse_shortcircuit_release(ff);
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 	fuse_prepare_release(ff, file->f_flags, opcode);
 
 	if (ff->flock) {
@@ -826,6 +879,10 @@ static void fuse_send_readpages(struct fuse_req *req, struct file *file)
 	req->out.page_replace = 1;
 	fuse_read_fill(req, file, pos, count, FUSE_READ);
 	req->misc.read.attr_ver = fuse_get_attr_version(fc);
+
+	mtk_btag_pidlog_set_pid_pages(req->pages, req->num_pages,
+				      PIDLOG_MODE_FS_FUSE, false);
+
 	if (fc->async_read) {
 		req->ff = fuse_file_get(ff);
 		req->end = fuse_readpages_end;
@@ -925,6 +982,10 @@ static ssize_t fuse_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct inode *inode = iocb->ki_filp->f_mapping->host;
 	struct fuse_conn *fc = get_fuse_conn(inode);
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	struct fuse_file *ff = iocb->ki_filp->private_data;
+	ssize_t ret_val;
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 
 	/*
 	 * In auto invalidate mode, always update attributes on read.
@@ -938,8 +999,16 @@ static ssize_t fuse_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		if (err)
 			return err;
 	}
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	if (ff && ff->rw_lower_file)
+		ret_val = fuse_shortcircuit_read_iter(iocb, to);
+	else
+		ret_val = generic_file_read_iter(iocb, to);
 
+	return ret_val;
+#else
 	return generic_file_read_iter(iocb, to);
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 }
 
 static void fuse_write_fill(struct fuse_req *req, struct fuse_file *ff,
@@ -1149,6 +1218,11 @@ static ssize_t fuse_perform_write(struct kiocb *iocb,
 		} else {
 			size_t num_written;
 
+			mtk_btag_pidlog_set_pid_pages(req->pages,
+						      req->num_pages,
+						      PIDLOG_MODE_FS_FUSE,
+						      true);
+
 			num_written = fuse_send_write_pages(req, iocb, inode,
 							    pos, count);
 			err = req->out.h.error;
@@ -1177,11 +1251,25 @@ static ssize_t fuse_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct file *file = iocb->ki_filp;
 	struct address_space *mapping = file->f_mapping;
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	struct fuse_file *ff = file->private_data;
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 	ssize_t written = 0;
 	ssize_t written_buffered = 0;
 	struct inode *inode = mapping->host;
 	ssize_t err;
 	loff_t endbyte = 0;
+
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	if (ff && ff->rw_lower_file) {
+		/* Update size (EOF optimization) and mode (SUID clearing) */
+		err = fuse_update_attributes(mapping->host, file);
+		if (err)
+			return err;
+
+		return fuse_shortcircuit_write_iter(iocb, from);
+	}
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
 
 	if (get_fuse_conn(inode)->writeback_cache) {
 		/* Update size (EOF optimization) and mode (SUID clearing) */
@@ -1984,6 +2072,7 @@ static int fuse_write_begin(struct file *file, struct address_space *mapping,
 		goto cleanup;
 success:
 	*pagep = page;
+	mtk_btag_pidlog_set_pid(page, PIDLOG_MODE_FS_FUSE, true);
 	return 0;
 
 cleanup:
@@ -2082,6 +2171,13 @@ static const struct vm_operations_struct fuse_file_vm_ops = {
 
 static int fuse_file_mmap(struct file *file, struct vm_area_struct *vma)
 {
+#ifdef CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT
+	struct fuse_file *ff = file->private_data;
+
+	if (ff->rw_lower_file)
+		return fuse_shortcircuit_mmap(file, vma);
+#endif /* CONFIG_OPLUS_FEATURE_FUSE_FS_SHORTCIRCUIT */
+
 	if ((vma->vm_flags & VM_SHARED) && (vma->vm_flags & VM_MAYWRITE))
 		fuse_link_write_file(file);
 

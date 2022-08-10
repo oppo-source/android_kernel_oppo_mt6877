@@ -696,6 +696,10 @@ config UCLAMP_MAP_OPP
 
 	  If in doubt, say N.
 
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+source "kernel/sched_assist/Kconfig"
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+
 config NONLINEAR_FREQ_CTL
 	bool "Non-linear frequency control"
 	depends on MTK_CPU_FREQ
@@ -1869,7 +1873,7 @@ config HAVE_GENERIC_DMA_COHERENT
 config SLABINFO
 	bool
 	depends on PROC_FS
-	depends on SLAB || SLUB_DEBUG
+	depends on SLAB || SLUB_DEBUG || KMALLOC_DEBUG
 	default y
 
 config RT_MUTEXES

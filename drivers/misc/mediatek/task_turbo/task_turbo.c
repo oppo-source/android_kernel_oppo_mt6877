@@ -34,6 +34,10 @@ static uint32_t latency_turbo = SUB_FEAT_LOCK | SUB_FEAT_BINDER |
 				SUB_FEAT_SCHED;
 static uint32_t launch_turbo =  SUB_FEAT_LOCK | SUB_FEAT_BINDER |
 				SUB_FEAT_SCHED | SUB_FEAT_FLAVOR_BIGCORE;
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+static uint32_t foreground_turbo =  SUB_FEAT_LOCK | SUB_FEAT_BINDER |
+				SUB_FEAT_SCHED | SUB_FEAT_FLAVOR_BIGCORE | SUB_FEAT_NO_RENICE;
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 static DEFINE_MUTEX(TURBO_MUTEX_LOCK);
 static pid_t turbo_pid[TURBO_PID_COUNT] = {0};
 static unsigned int task_turbo_feats;
@@ -88,8 +92,17 @@ static inline void set_scheduler_tuning(struct task_struct *task)
 	if (sub_feat_enable(SUB_FEAT_FLAVOR_BIGCORE))
 		sched_set_cpuprefer(task->pid, SCHED_PREFER_BCPU);
 
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	if (sub_feat_enable(SUB_FEAT_NO_RENICE)) {
+		task->nice_backup = cur_nice;
+	} else {
+		/* trigger renice for turbo task */
+		set_user_nice(task, 0xbeef);
+	}
+#else
 	/* trigger renice for turbo task */
 	set_user_nice(task, 0xbeef);
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 
 	trace_sched_turbo_nice_set(task, NICE_TO_PRIO(cur_nice), task->prio);
 }
@@ -156,8 +169,14 @@ static int set_task_turbo_feats(const char *buf,
 
 	mutex_lock(&TURBO_MUTEX_LOCK);
 	if (val == latency_turbo ||
-	    val == launch_turbo  || val == 0)
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+		val == launch_turbo  || val == 0 || val == foreground_turbo)
+#else
+		val == launch_turbo  || val == 0)
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+	{
 		ret = param_set_uint(buf, kp);
+	}
 	else
 		ret = -EINVAL;
 

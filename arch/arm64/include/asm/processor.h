@@ -203,6 +203,10 @@ static inline void cpu_relax(void)
 	asm volatile("yield" ::: "memory");
 }
 
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+unsigned long* get_backtrace(struct task_struct *p);
+#endif
+
 /* Thread switching */
 extern struct task_struct *cpu_switch_to(struct task_struct *prev,
 					 struct task_struct *next);

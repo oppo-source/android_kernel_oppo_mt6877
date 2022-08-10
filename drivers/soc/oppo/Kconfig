@@ -1,0 +1,25 @@
+#ifdef OPLUS_FEATURE_TP_BASIC
+config OPPO_ARCH_FILE
+    bool "for build directory oppo"
+    ---help---
+    say Y to buid in
+source "drivers/soc/oppo/oppo_devinfo/Kconfig"
+
+
+source "drivers/soc/oppo/oppo_devinfo/Kconfig"
+#source "drivers/soc/oppo/oppo_als_cali_value/Kconfig"
+#source "drivers/soc/oppo/oppo_hypnus/Kconfig"
+#//Wen.Luo@BSP
+#source "drivers/soc/oppo/oppo_shutdown_detect/Kconfig"
+
+#source "drivers/soc/oppo/oppo_phoenix/Kconfig"
+#endif /* OPLUS_FEATURE_TP_BASIC */
+
+#ifdef VENDOR_EDIT
+#source "drivers/soc/oppo/oppo_key_handle/Kconfig"
+#endif /* VENDOR_EDIT */
+
+#ifdef OPLUS_FEATURE_SENSOR_SMEM
+source "drivers/soc/oppo/oppo_als_cali_value/Kconfig"
+#endif /*OPLUS_FEATURE_SENSOR_SMEM */
+

@@ -17,5 +17,41 @@ source "drivers/soc/ti/Kconfig"
 source "drivers/soc/ux500/Kconfig"
 source "drivers/soc/versatile/Kconfig"
 source "drivers/soc/zte/Kconfig"
+#ifdef VENDOR_EDIT
+source "drivers/soc/oppo/Kconfig"
+#endif /*VENDOR_EDIT*/
+#ifdef OPLUS_FEATURE_IOMONITOR
+source "drivers/soc/oplus/iomonitor/Kconfig"
+#endif /*OPLUS_FEATURE_IOMONITOR*/
+#ifdef VENDOR_EDIT
+source "drivers/soc/oplus/system/Kconfig"
+#endif /* VENDOR_EDIT */
+
+#ifdef VENDOR_EDIT
+source "drivers/soc/oppo/Kconfig"
+#endif /*VENDOR_EDIT*/
+#ifdef OPLUS_FEATURE_HEALTHINFO
+source "drivers/soc/oplus/healthinfo/Kconfig"
+#endif /*OPLUS_FEATURE_HEALTHINFO*/
+
+#ifdef OPLUS_FEATURE_LOWMEM_DBG
+source "drivers/soc/oplus/lowmem_dbg/Kconfig"
+##endif /* OPLUS_FEATURE_LOWMEM_DBG */
+
+#ifdef OPLUS_FEATURE_MEMLEAK_DETECT
+source "drivers/soc/oplus/svelte/Kconfig"
+#endif /* OPLUS_FEATURE_MEMLEAK_DETECT */
+
+#Add for NandSwap
+source "drivers/soc/oplus/oplus_nandswap/Kconfig"
+
+#ifdef OPLUS_FEATURE_MIDAS
+source "drivers/soc/oplus/midas/Kconfig"
+#endif
+
+#ifdef OPLUS_FEATURE_RT_INFO
+source "drivers/soc/oplus/rt_info/Kconfig"
+#endif
+
 
 endmenu

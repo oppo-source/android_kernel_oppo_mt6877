@@ -8,4 +8,10 @@ obj-$(CONFIG_NANOHUB) += mtk_nanohub/
 endif
 obj-$(CONFIG_MTK_HF_LSM6DSM_SECONDARY) += lsm6dsm_secondary/
 obj-$(CONFIG_MTK_HF_TEST_CASE) += test/
+#ifdef OPLUS_FEATURE_SENSOR
+obj-y += oplus_sensor_devinfo/
+#ifneq ($(OPLUS_FEATURE_SENSOR_ALGORITHM),)
+obj-y += oplus_virtual_sensor/
+#endif
+#endif //OPLUS_FEATURE_SENSOR
 endif

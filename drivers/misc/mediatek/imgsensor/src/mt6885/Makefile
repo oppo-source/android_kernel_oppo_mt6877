@@ -30,7 +30,14 @@ obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_legacy.o
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_proc.o
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_sensor_list.o
 obj-y				+= ../common/$(COMMON_VERSION)/seninf.o
-obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_pwr_seq.o
+#ifdef VENDOR_EDIT
+obj-y				+= ../OplusImgsensor/imgsensor_eeprom.o
+obj-y				+= ../OplusImgsensor/imgsensor_hwcfg_custom.o
+obj-y				+= ../OplusImgsensor/imgsensor_hwcfg_20131.o
+obj-y				+= ../OplusImgsensor/imgsensor_hwcfg_20075.o
+obj-y				+= ../OplusImgsensor/imgsensor_hwcfg_20015.o
+obj-y				+= ../OplusImgsensor/imgsensor_hwcfg_20609.o
+#endif
 define FILTER_DRV
 ifeq ($(wildcard $(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/camera_project/$(ARCH_MTK_PROJECT)/$(1)),)
 ifeq ($(wildcard $(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/$(1)),)

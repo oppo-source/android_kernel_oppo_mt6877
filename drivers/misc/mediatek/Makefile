@@ -141,6 +141,11 @@ obj-$(CONFIG_MTK_CCU) += ccu/src/
 
 obj-$(CONFIG_MTK_CQDMA) += cqdma/
 
+#ifdef ODM_HQ_EDIT
+###obj-$(CONFIG_SET_LCD_BIAS_ODM_HQ) += lcd_bias/
+#endif #ODM_HQ_EDIT
+obj-y += lcd_bias/
+
 ifeq ($(CONFIG_MTK_GAUGE_VERSION),30)
 obj-y += power/
 else
@@ -166,6 +171,7 @@ endif
 obj-y += perf/
 obj-$(CONFIG_MTK_JPEG) += jpeg/
 obj-$(CONFIG_MTK_SPMTWAM) += twam/
+obj-$(CONFIG_MTK_PMSR) += pmsr/
 obj-$(CONFIG_MTK_LOW_POWER_MODULE) += lpm/
 obj-$(CONFIG_MTK_TASK_TURBO) += task_turbo/
 obj-$(CONFIG_MTK_UNIFIED_DEBUG_INTERFACE) += udi/
@@ -173,4 +179,6 @@ obj-y += rps/
 obj-$(CONFIG_MTK_MDDP_SUPPORT) += mddp/
 obj-$(CONFIG_MTK_USB2JTAG_SUPPORT) += usb2jtag/
 obj-y += subpmic/
+obj-$(CONFIG_MTK_GATE_IC) += gate_ic/
 obj-$(CONFIG_MTK_OTP) += otp/
+obj-$(CONFIG_MTK_SDA) += sda/

@@ -108,7 +108,6 @@ struct eem_det eem_detectors[NR_EEM_DET] = {
 		.DCCONFIG	= DCCONFIG_VAL,
 		.EEMCTL0	= EEM_CTL0_L,
 		.low_temp_off	= LOW_TEMP_OFF_L,
-		.high_temp85_off	= HIGH_TEMP_OFF_L,
 		.high_temp_off	= HIGH_TEMP_OFF_L,
 	},
 
@@ -147,9 +146,8 @@ struct eem_det eem_detectors[NR_EEM_DET] = {
 		.DVTFIXED	= DVTFIXED_VAL,
 		.DCCONFIG	= DCCONFIG_VAL,
 		.EEMCTL0	= EEM_CTL0_BL,
-		.low_temp_off	= LOW_TEMP_OFF_L,
-		.high_temp85_off	= HIGH_TEMP_OFF_L,
-		.high_temp_off	= HIGH_TEMP_OFF_L,
+		.low_temp_off	= LOW_TEMP_OFF_B,
+		.high_temp_off	= HIGH_TEMP_OFF_B,
 	},
 
 	[EEM_DET_B] = {
@@ -180,7 +178,6 @@ struct eem_det eem_detectors[NR_EEM_DET] = {
 		.DCCONFIG	= DCCONFIG_VAL,
 		.EEMCTL0	= EEM_CTL0_B,
 		.low_temp_off	= LOW_TEMP_OFF_B,
-		.high_temp85_off	= HIGH_TEMP_OFF_B,
 		.high_temp_off	= HIGH_TEMP_OFF_B,
 	},
 
@@ -213,7 +210,6 @@ struct eem_det eem_detectors[NR_EEM_DET] = {
 		.DCCONFIG	= DCCONFIG_VAL,
 		.EEMCTL0	= EEM_CTL0_CCI,
 		.low_temp_off	= LOW_TEMP_OFF_L,
-		.high_temp85_off	= HIGH_TEMP_OFF_L,
 		.high_temp_off	= HIGH_TEMP_OFF_L,
 	},
 

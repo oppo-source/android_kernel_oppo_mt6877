@@ -65,6 +65,17 @@
 #include <mt-plat/mtk_qos_prefetch_common.h>
 #endif /* CONFIG_MTK_QOS_FRAMEWORK */
 
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+#include <linux/sched_assist/sched_assist_common.h>
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_SCHED_WALT)
+#include <linux/sched_assist/sched_assist_slide.h>
+#endif /* defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_OPLUS_FEATURE_SCHED_ASSIST) */
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+#include <linux/task_sched_info.h>
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 DEFINE_MUTEX(sched_isolation_mutex);
@@ -874,14 +885,13 @@ void init_opp_capacity_tbl(void)
 	struct sched_group *sg;
 	const struct sched_group_energy *sge;
 	struct cpufreq_policy *policy;
-	unsigned int *tbl;
+        unsigned int *tbl;
 
 	count = system_opp_count();
 	if (count < 0)
 		return;
-
-	tbl = kmalloc_array(count, sizeof(unsigned int), GFP_KERNEL);
-	if (!tbl)
+        tbl = kmalloc_array(count, sizeof(unsigned int), GFP_KERNEL);
+        if (!tbl)
 		return;
 
 	rcu_read_lock();
@@ -907,25 +917,25 @@ void init_opp_capacity_tbl(void)
 
 		for (i = 0; i < sge->nr_cap_states; i++) {
 			cap = get_opp_capacity(policy, i);
-			tbl[idx] = cap;
+                        tbl[idx] = cap;
 			idx++;
 		}
 		cpufreq_cpu_put(policy);
 		prev_cid = cid;
 	}
 	rcu_read_unlock();
-
-	sort(tbl, count, sizeof(unsigned int),
+        sort(tbl, count, sizeof(unsigned int),
 			&cap_compare, NULL);
 	tbl[count - 1] = SCHED_CAPACITY_SCALE;
 	total_opp_count = count;
-	opp_capacity_tbl = tbl;
+        opp_capacity_tbl = tbl;
+
 	opp_capacity_tbl_ready = 1;
 
 	return;
 free_unlock:
 	rcu_read_unlock();
-	kfree(tbl);
+         kfree(tbl);
 }
 
 unsigned int find_fit_capacity(unsigned int cap)
@@ -1316,7 +1326,7 @@ static inline void uclamp_cpu_put_id(struct task_struct *p, struct rq *rq,
 		rq->uclamp.group[clamp_id][group_id].tasks -= 1;
 #ifdef CONFIG_SCHED_DEBUG
 	else {
-		printk_deferred("[name:uclamp&] invalid CPU[%d] clamp group [%u:%u] refcount\n",
+		printk_deferred_once("[name:uclamp&] invalid CPU[%d] clamp group [%u:%u] refcount\n",
 		     cpu_of(rq), clamp_id, group_id);
 	}
 #endif
@@ -1327,7 +1337,7 @@ static inline void uclamp_cpu_put_id(struct task_struct *p, struct rq *rq,
 	clamp_value = rq->uclamp.group[clamp_id][group_id].value;
 #ifdef CONFIG_SCHED_DEBUG
 	if (unlikely(clamp_value > rq->uclamp.value[clamp_id])) {
-		printk_deferred("[name:uclamp&] invalid CPU[%d] clamp group [%u:%u] value\n",
+		printk_deferred_once("[name:uclamp&] invalid CPU[%d] clamp group [%u:%u] value\n",
 		     cpu_of(rq), clamp_id, group_id);
 	}
 #endif
@@ -1561,9 +1571,11 @@ retry:
 		/* Refcounting is expected to be always 0 for free groups */
 		if (unlikely(uc_cpu->group[clamp_id][group_id].tasks)) {
 #ifdef CONFIG_SCHED_DEBUG
-			pr_warn("invalid CPU[%d] clamp group [%u:%u] refcount: [%u]\n",
+			WARN_ONCE(1, "invalid CPU[%d] clamp group [%u:%u] refcount: [%u] free_group_id: [%u] uc_map_new.se_count: [%lu]\n",
 			     cpu, clamp_id, group_id,
-			     uc_cpu->group[clamp_id][group_id].tasks);
+			     uc_cpu->group[clamp_id][group_id].tasks,
+				free_group_id,
+				uc_map_new.se_count);
 #endif
 			uc_cpu->group[clamp_id][group_id].tasks = 0;
 		}
@@ -2052,6 +2064,17 @@ static inline void check_class_changed(struct rq *rq, struct task_struct *p,
 void check_preempt_curr(struct rq *rq, struct task_struct *p, int flags)
 {
 	const struct sched_class *class;
+
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+//#ifdef CONFIG_UXCHAIN_V2
+	u64 wallclock = sched_clock();
+
+	if (sysctl_uxchain_v2 &&
+		wallclock - rq->curr->get_mmlock_ts < PREEMPT_DISABLE_RWSEM &&
+		rq->curr->get_mmlock &&
+		!(p->flags & PF_WQ_WORKER) && !task_has_rt_policy(p))
+		return;
+#endif
 
 	if (p->sched_class == rq->curr->sched_class) {
 		rq->curr->sched_class->check_preempt_curr(rq, p, flags);
@@ -3109,6 +3132,14 @@ static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
 	rq_unlock(rq, &rf);
 }
 
+#ifdef CONFIG_OPLUS_FEATURE_RT_INFO
+rt_info_handler rt_handler = NULL;
+void register_rt_info_handler(rt_info_handler h) {
+    rt_handler = h;
+    pr_info("Add a rt_info handler\n");
+}
+#endif
+
 /*
  * Notes on Program-Order guarantees on SMP systems.
  *
@@ -3213,6 +3244,11 @@ static inline void walt_try_to_wake_up(struct task_struct *p)
 	wallclock = walt_ktime_clock();
 	walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
 	walt_update_task_ravg(p, rq, TASK_WAKE, wallclock, 0);
+#ifdef CONFIG_SCHED_WALT
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	p->last_wake_ts = wallclock;
+#endif
+#endif
 	rq_unlock_irqrestore(rq, &rf);
 }
 #else
@@ -3258,6 +3294,14 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags,
 
 	trace_sched_waking(p);
 
+#ifdef CONFIG_OPLUS_FEATURE_RT_INFO
+	if (rt_handler != NULL)
+		rt_handler(p);
+#endif
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_wake_tid(p, current, other_runnable);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	/* We're going to change ->state: */
 	success = 1;
 	cpu = task_cpu(p);
@@ -3390,6 +3434,10 @@ static void try_to_wake_up_local(struct task_struct *p, struct rq_flags *rf)
 
 	trace_sched_waking(p);
 
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_wake_tid(p, current, other_runnable);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
+
 	if (!task_on_rq_queued(p)) {
 		u64 wallclock = walt_ktime_clock();
 
@@ -3401,6 +3449,11 @@ static void try_to_wake_up_local(struct task_struct *p, struct rq_flags *rf)
 			atomic_dec(&rq->nr_iowait);
 		}
 		ttwu_activate(rq, p, ENQUEUE_WAKEUP | ENQUEUE_NOCLOCK);
+#ifdef CONFIG_SCHED_WALT
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	p->last_wake_ts = wallclock;
+#endif
+#endif
 	}
 
 	ttwu_do_wakeup(rq, p, 0, rf);
@@ -3773,6 +3826,9 @@ void wake_up_new_task(struct task_struct *p)
 	walt_mark_task_starting(p);
 
 	p->on_rq = TASK_ON_RQ_QUEUED;
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_wake_tid(p, current, other_runnable);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	trace_sched_wakeup_new(p);
 	check_preempt_curr(rq, p, WF_FORK);
 #ifdef CONFIG_SMP
@@ -4314,7 +4370,6 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 
 	return ns;
 }
-
 /*
  * This function gets called by the timer code, with HZ frequency.
  * We call it with interrupts disabled.
@@ -4334,6 +4389,11 @@ void scheduler_tick(void)
 	walt_update_task_ravg(rq->curr, rq, TASK_UPDATE,
 			walt_ktime_clock(), 0);
 	update_rq_clock(rq);
+#if defined(OPLUS_FEATURE_SCHED_ASSIST) && defined(CONFIG_SCHED_WALT)
+	unsigned int flag = 0;
+	slide_calc_boost_load(rq, &flag, cpu);
+	cpufreq_update_util(rq, flag);
+#endif
 	curr->sched_class->task_tick(rq, curr, 0);
 	cpu_load_update_active(rq);
 	calc_global_load_tick(rq);
@@ -4346,6 +4406,9 @@ void scheduler_tick(void)
 #ifdef CONFIG_MTK_CACHE_CONTROL
 	hook_ca_scheduler_tick(cpu);
 #endif
+#ifdef CONFIG_MTK_PERF_TRACKER
+	perf_tracker(ktime_get_ns());
+#endif
 
 #ifdef CONFIG_SMP
 	rq->idle_balance = idle_cpu(cpu);
@@ -4355,10 +4418,6 @@ void scheduler_tick(void)
 
 #ifdef CONFIG_MTK_SCHED_RQAVG_KS
 	sched_max_util_task_tracking();
-#endif
-
-#ifdef CONFIG_MTK_PERF_TRACKER
-	perf_tracker(ktime_get_ns());
 #endif
 
 #ifdef CONFIG_MTK_SCHED_CPULOAD
@@ -4686,6 +4745,10 @@ static void __sched notrace __schedule(bool preempt)
 		switch_count = &prev->nvcsw;
 	}
 
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	prev->enqueue_time = rq->clock;
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+
 	next = pick_next_task(rq, prev, &rf);
 	wallclock = walt_ktime_clock();
 	walt_update_task_ravg(prev, rq, PUT_PREV_TASK, wallclock, 0);
@@ -4718,6 +4781,11 @@ static void __sched notrace __schedule(bool preempt)
 		++*switch_count;
 
 		trace_sched_switch(preempt, prev, next);
+
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+		update_wake_tid(prev, next, running_runnable);
+		update_running_start_time(prev, next);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next, &rf);
@@ -6916,14 +6984,6 @@ static void migrate_tasks(struct rq *dead_rq, struct rq_flags *rf,
 			break;
 
 		/*
-		 * put_prev_task() and pick_next_task() sched
-		 * class method both need to have an up-to-date
-		 * value of rq->clock[_task],
-		 * this value may be changed, so must update again.
-		 */
-		if (!(rq->clock_update_flags & RQCF_UPDATED))
-			update_rq_clock(rq);
-		/*
 		 * pick_next_task() assumes pinned rq->lock:
 		 */
 		next = pick_next_task(rq, &fake_task, rf);
@@ -7136,13 +7196,15 @@ int _sched_isolate_cpu(int cpu)
 
 out:
 	cpu_maps_update_done();
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_cpu_isolate_info(cpu, cpu_isolate);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	trace_sched_isolate(cpu, cpumask_bits(cpu_isolated_mask)[0],
 			    start_time, 1);
 	printk_deferred("%s: prio=%d, cpu=%d, isolation_cpus=0x%lx\n",
 			__func__, iso_prio, cpu, cpu_isolated_mask->bits[0]);
 	return ret_code;
 }
-EXPORT_SYMBOL(_sched_isolate_cpu);
 
 /*
  * Note: The client calling sched_isolate_cpu() is repsonsible for ONLY
@@ -7150,7 +7212,7 @@ EXPORT_SYMBOL(_sched_isolate_cpu);
  * Client is also responsible for deisolating when a core goes offline
  * (after CPU is marked offline).
  */
-int sched_deisolate_cpu_unlocked(int cpu)
+int __sched_deisolate_cpu_unlocked(int cpu)
 {
 	int ret_code = 0;
 	struct rq *rq = cpu_rq(cpu);
@@ -7192,6 +7254,9 @@ int sched_deisolate_cpu_unlocked(int cpu)
 out:
 	trace_sched_isolate(cpu, cpumask_bits(cpu_isolated_mask)[0],
 			    start_time, 0);
+#if defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED)
+	update_cpu_isolate_info(cpu, cpu_unisolate);
+#endif /* defined(OPLUS_FEATURE_TASK_CPUSTATS) && defined(CONFIG_OPLUS_SCHED) */
 	printk_deferred("%s: prio=%d, cpu=%d, isolation_cpus=0x%lx\n",
 			__func__, iso_prio, cpu, cpu_isolated_mask->bits[0]);
 	return ret_code;
@@ -7202,11 +7267,10 @@ int _sched_deisolate_cpu(int cpu)
 	int ret_code;
 
 	cpu_maps_update_begin();
-	ret_code = sched_deisolate_cpu_unlocked(cpu);
+	ret_code = __sched_deisolate_cpu_unlocked(cpu);
 	cpu_maps_update_done();
 	return ret_code;
 }
-EXPORT_SYMBOL(_sched_deisolate_cpu);
 
 void iso_cpumask_init(void)
 {
@@ -7477,11 +7541,6 @@ int sched_cpu_deactivate(unsigned int cpu)
 static void sched_rq_cpu_starting(unsigned int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
-	struct rq_flags rf;
-
-	rq_lock_irqsave(rq, &rf);
-	walt_set_window_start(rq, &rf);
-	rq_unlock_irqrestore(rq, &rf);
 
 	rq->calc_load_update = calc_load_update;
 	update_max_interval();
@@ -7556,6 +7615,9 @@ void __init sched_init_smp(void)
 	sched_init_granularity();
 	free_cpumask_var(non_isolated_cpus);
 
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	ux_init_cpu_data();
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 	init_sched_rt_class();
 	init_sched_dl_class();
 
@@ -7597,6 +7659,17 @@ static struct kmem_cache *task_group_cache __read_mostly;
 
 DECLARE_PER_CPU(cpumask_var_t, load_balance_mask);
 DECLARE_PER_CPU(cpumask_var_t, select_idle_mask);
+
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+void set_random_uxchain_v2(void)
+{
+	int rand = 1;
+
+	get_random_bytes(&rand, 1);
+	printk("get_random_bytes %d\n", rand);
+	sysctl_uxchain_v2 = rand % 2;
+}
+#endif
 
 void __init sched_init(void)
 {
@@ -7674,6 +7747,9 @@ void __init sched_init(void)
 		init_cfs_rq(&rq->cfs);
 		init_rt_rq(&rq->rt);
 		init_dl_rq(&rq->dl);
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+		ux_init_rq_data(rq);
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 #ifdef CONFIG_FAIR_GROUP_SCHED
 		root_task_group.shares = ROOT_TASK_GROUP_LOAD;
 		INIT_LIST_HEAD(&rq->leaf_cfs_rq_list);
@@ -7778,6 +7854,10 @@ void __init sched_init(void)
 	init_sched_energy_costs();
 
 	psi_init();
+
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+	set_random_uxchain_v2();
+#endif
 
 	scheduler_running = 1;
 

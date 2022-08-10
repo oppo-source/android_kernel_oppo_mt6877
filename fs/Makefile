@@ -55,8 +55,8 @@ obj-$(CONFIG_FHANDLE)		+= fhandle.o
 obj-$(CONFIG_FS_IOMAP)		+= iomap.o
 
 obj-y				+= quota/
-
-obj-$(CONFIG_PROC_FS)		+= proc/
+obj-y                           += proc/
+#obj-$(CONFIG_PROC_FS)		+= proc/
 obj-$(CONFIG_KERNFS)		+= kernfs/
 obj-$(CONFIG_SYSFS)		+= sysfs/
 obj-$(CONFIG_CONFIGFS_FS)	+= configfs/
@@ -131,6 +131,8 @@ obj-$(CONFIG_BTRFS_FS)		+= btrfs/
 obj-$(CONFIG_GFS2_FS)           += gfs2/
 obj-$(CONFIG_F2FS_FS)		+= f2fs/
 obj-y				+= exofs/ # Multiple modules
+obj-$(CONFIG_EROFS_FS)		+= erofs/
 obj-$(CONFIG_CEPH_FS)		+= ceph/
 obj-$(CONFIG_PSTORE)		+= pstore/
 obj-$(CONFIG_EFIVAR_FS)		+= efivarfs/
+obj-$(CONFIG_EXFAT_FS)		+= exfat/

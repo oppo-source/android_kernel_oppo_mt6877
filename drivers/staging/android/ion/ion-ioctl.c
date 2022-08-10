@@ -21,6 +21,7 @@
 #include "ion.h"
 #include "ion_priv.h"
 #include "compat_ion.h"
+#include "mtk_ion.h"
 
 union ion_ioctl_arg {
 	struct ion_fd_data fd;
@@ -102,11 +103,11 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	{
 		struct ion_handle *handle;
 
-		handle = ion_alloc(
+		handle = __ion_alloc(
 						client, data.allocation.len,
 						data.allocation.align,
 						data.allocation.heap_id_mask,
-						data.allocation.flags);
+						data.allocation.flags, true);
 		if (IS_ERR(handle)) {
 			IONMSG(
 				"ION_IOC_ALLOC handle is invalid. ret = %d.\n",
@@ -209,7 +210,6 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			if (cleanup_handle) {
 				mutex_lock(&client->lock);
 				user_ion_free_nolock(client, cleanup_handle);
-				ion_handle_put_nolock(cleanup_handle);
 				mutex_unlock(&client->lock);
 			}
 			IONMSG(
@@ -219,5 +219,7 @@ long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		}
 	}
+	if (cleanup_handle)
+		ion_handle_put(cleanup_handle);
 	return ret;
 }

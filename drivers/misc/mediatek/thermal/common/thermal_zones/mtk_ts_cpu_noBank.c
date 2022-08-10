@@ -32,6 +32,7 @@
 #include "mach/mtk_thermal.h"
 #include "mtk_thermal_timer.h"
 #include <mtk_ts_setting.h>
+#include <soc/oplus/system/oppo_project.h>
 
 #if defined(CONFIG_MTK_CLKMGR)
 #include <mach/mtk_clkmgr.h>
@@ -1567,6 +1568,7 @@ static void check_temp_range(void)
 				g_is_TempOutsideNormalRange |= (j << 8);
 				tscpu_printk(TSCPU_LOG_TAG"ONRT=%d,0x%x\n",
 					temp, g_is_TempOutsideNormalRange);
+				dump_lvts_error_info();
 			}
 
 			if (temp <= -30000) {
@@ -1615,13 +1617,17 @@ static void read_all_tc_temperature(void)
 		if (lvts_hw_protect_enabled) {
 			dump_lvts_error_info();
 			tscpu_printk("thermal_hw_protect_en\n");
-			BUG();
+			if (get_eng_version() != HIGH_TEMP_AGING)
+				BUG();
+			else
+				pr_info("%s should reset but bypass\n", __func__);
 		} else {
 			tscpu_printk("thermal_hw_protect_dis\n");
 		}
 #else
 		dump_lvts_error_info();
-		BUG();
+		if (get_eng_version() != HIGH_TEMP_AGING)
+			BUG();
 #endif
 
 	}
@@ -2575,9 +2581,10 @@ static void init_thermal(void)
 	lvts_enable_all_sensing_points();
 
 	read_all_tc_temperature();
-
+#if defined(CONFIG_MTK_TINYSYS_SSPM_SUPPORT)
 #if THERMAL_ENABLE_TINYSYS_SSPM || THERMAL_ENABLE_ONLY_TZ_SSPM
 	lvts_ipi_send_efuse_data();
+#endif
 #endif
 #endif
 }

@@ -160,6 +160,23 @@ static enum TRUSTED_MEM_REQ_TYPE get_trusted_mem_type(unsigned int heap_id)
 		return TRUSTED_MEM_REQ_SVP;
 	}
 }
+
+enum TRUSTED_MEM_REQ_TYPE ion_get_trust_mem_type(struct dma_buf *dmabuf)
+{
+	enum TRUSTED_MEM_REQ_TYPE tmem_type = TRUSTED_MEM_REQ_SVP;
+	struct ion_buffer *buffer;
+
+	if (!dmabuf) {
+		IONMSG("%s dmabuf is NULL\n");
+		return TRUSTED_MEM_REQ_SVP;
+	}
+
+	buffer = dmabuf->priv;
+	if (buffer)
+		tmem_type = get_trusted_mem_type(buffer->heap->id);
+
+	return tmem_type;
+}
 #endif
 
 static int ion_sec_heap_allocate(struct ion_heap *heap,
@@ -451,7 +468,13 @@ void ion_sec_heap_dump_info(void)
 			     "client", "dbg_name", "pid", "size", "address");
 	ION_DUMP(NULL, "%s\n", seq_line);
 
+#ifdef OPLUS_FEATURE_PERFORMANCE
+/* use two separate locks for heaps and
+ * clients in ion_device */
+	if (!down_read_trylock(&dev->client_lock)) {
+#else /* OPLUS_FEATURE_PERFORMANCE */
 	if (!down_read_trylock(&dev->lock)) {
+#endif /* OPLUS_FEATURE_PERFORMANCE */
 		ION_DUMP(
 			 NULL,
 			 "detail trylock fail, alloc pid(%d-%d)\n",
@@ -499,7 +522,13 @@ void ion_sec_heap_dump_info(void)
 	}
 
 	if (need_dev_lock)
+#ifdef OPLUS_FEATURE_PERFORMANCE
+/* use two separate locks for heaps and
+ * clients in ion_device */
+		up_read(&dev->client_lock);
+#else /* OPLUS_FEATURE_PERFORMANCE */
 		up_read(&dev->lock);
+#endif /* OPLUS_FEATURE_PERFORMANCE */
 
 	ION_DUMP(NULL, "%s\n", seq_line);
 	ION_DUMP(
@@ -592,6 +621,10 @@ static int ion_dump_all_share_fds(struct seq_file *s)
 	int res;
 	struct dump_fd_data data;
 
+	/* function is not available, just return */
+	if (ion_drv_file_to_buffer(NULL) == ERR_PTR(-EPERM))
+		return 0;
+
 	ION_DUMP(
 		 s,
 		 "%18s %9s %16s %5s %5s %16s %4s\n",
@@ -621,6 +654,7 @@ static int ion_sec_heap_debug_show(
 	struct ion_sec_buffer_info *bug_info;
 	bool has_orphaned = false;
 	size_t fr_size = 0;
+	size_t wfd_size = 0;
 	size_t sec_size = 0;
 	size_t prot_size = 0;
 	const char *seq_line = "---------------------------------------";
@@ -669,6 +703,8 @@ static int ion_sec_heap_debug_show(
 				prot_size += buffer->size;
 			if (buffer->heap->id == ION_HEAP_TYPE_MULTIMEDIA_2D_FR)
 				fr_size += buffer->size;
+			if (buffer->heap->id == ION_HEAP_TYPE_MULTIMEDIA_WFD)
+				wfd_size += buffer->size;
 
 			if (!buffer->handle_count)
 				has_orphaned = true;
@@ -683,11 +719,18 @@ static int ion_sec_heap_debug_show(
 	ION_DUMP(s, "%s\n", seq_line);
 	ION_DUMP(s, "%s\n", seq_line);
 	ION_DUMP(s, "%16s %16zu\n", "sec-sz:", sec_size);
+	ION_DUMP(s, "%16s %16zu\n", "wfd-sz:", wfd_size);
 	ION_DUMP(s, "%16s %16zu\n", "prot-sz:", prot_size);
 	ION_DUMP(s, "%16s %16zu\n", "2d-fr-sz:", fr_size);
 	ION_DUMP(s, "%s\n", seq_line);
 
+#ifdef OPLUS_FEATURE_PERFORMANCE
+/* use two separate locks for heaps and
+ * clients in ion_device */
+	down_read(&dev->client_lock);
+#else /* OPLUS_FEATURE_PERFORMANCE */
 	down_read(&dev->lock);
+#endif /* OPLUS_FEATURE_PERFORMANCE */
 	for (n = rb_first(&dev->clients); n; n = rb_next(n)) {
 		struct ion_client
 		*client = rb_entry(n, struct ion_client, node);
@@ -718,6 +761,8 @@ static int ion_sec_heap_debug_show(
 				if (handle->buffer->heap->id ==
 					ION_HEAP_TYPE_MULTIMEDIA_SEC ||
 				    handle->buffer->heap->id ==
+				    ION_HEAP_TYPE_MULTIMEDIA_WFD ||
+				    handle->buffer->heap->id ==
 				    ION_HEAP_TYPE_MULTIMEDIA_PROT ||
 				    handle->buffer->heap->id ==
 				    ION_HEAP_TYPE_MULTIMEDIA_2D_FR) {
@@ -732,7 +777,13 @@ static int ion_sec_heap_debug_show(
 			mutex_unlock(&client->lock);
 		}
 	}
+#ifdef OPLUS_FEATURE_PERFORMANCE
+/* use two separate locks for heaps and
+ * clients in ion_device */
+	up_read(&dev->client_lock);
+#else /* OPLUS_FEATURE_PERFORMANCE */
 	up_read(&dev->lock);
+#endif /* OPLUS_FEATURE_PERFORMANCE */
 
 	return 0;
 }

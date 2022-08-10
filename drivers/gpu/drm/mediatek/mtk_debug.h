@@ -30,6 +30,15 @@
 #define DEBUG_BUFFER_SIZE 10240
 #endif
 
+extern void disp_color_set_bypass(struct drm_crtc *crtc, int bypass);
+extern void disp_ccorr_set_bypass(struct drm_crtc *crtc, int bypass);
+extern void disp_gamma_set_bypass(struct drm_crtc *crtc, int bypass);
+extern void disp_dither_set_bypass(struct drm_crtc *crtc, int bypass);
+extern void disp_aal_set_bypass(struct drm_crtc *crtc, int bypass);
+
+int mtk_drm_ioctl_pq_debug_set_bypass(struct drm_device *dev, void *data,
+	struct drm_file *file_priv);
+
 extern int mtk_disp_hrt_bw_dbg(void);
 
 #ifdef _DRM_P_H_
@@ -42,10 +51,7 @@ struct disp_rect {
 void disp_dbg_probe(void);
 void disp_dbg_init(struct drm_device *drm_dev);
 void disp_dbg_deinit(void);
-void mtk_drm_cwb_backup_copy_size(void);
 int mtk_dprec_mmp_dump_ovl_layer(struct mtk_plane_state *plane_state);
-int mtk_dprec_mmp_dump_cwb_buffer(struct drm_crtc *crtc,
-	void *buffer, unsigned int buf_idx);
 int disp_met_set(void *data, u64 val);
 void mtk_drm_idlemgr_kick_ext(const char *source);
 unsigned int mtk_dbg_get_lfr_mode_value(void);

@@ -255,9 +255,8 @@ void apusys_clk_path_update_pwr(enum DVFS_USER user, enum DVFS_VOLTAGE voltage)
 			dvfs_clk_path_max_vol[user][path_volt_index] :
 			voltage);
 
-			PWR_LOG_INF("%s, volt=%d, user_path_volt[%s][%d]=%d\n",
+			PWR_LOG_INF("%s, user_path_volt[%s][%d]=%d\n",
 			__func__,
-			voltage,
 			user_str[user],
 			path_volt_index,
 			apusys_opps.user_path_volt[user][path_volt_index]);
@@ -377,8 +376,14 @@ void apusys_pwr_efficiency_check(void)
 			continue;
 		buck_index = apusys_buck_domain_to_buck[buck_domain_index];
 	for (opp_index = 0;	opp_index < APUSYS_MAX_NUM_OPPS; opp_index++) {
+#ifndef CONFIG_MACH_MT6877
 		if (apusys_opps.opps[opp_index][buck_domain_index].voltage <=
 			apusys_opps.next_buck_volt[buck_index]){
+#else
+		if ((apusys_opps.opps[opp_index][buck_domain_index].voltage <=
+			apusys_opps.next_buck_volt[buck_index]) ||
+			(opp_index == (APUSYS_MAX_NUM_OPPS - 1))) {
+#endif
 			user = apusys_buck_domain_to_user[buck_domain_index];
 			if (user < APUSYS_DVFS_USER_NUM) {
 				if (apusys_opps.is_power_on[user] == false)
@@ -543,7 +548,7 @@ void apusys_frequency_check(void)
 			if (apusys_power_on == false &&
 #ifndef CONFIG_MACH_MT6853
 			apusys_opps.is_power_on[EDMA] == false &&
-#ifndef CONFIG_MACH_MT6873
+#if !defined(CONFIG_MACH_MT6873) && !defined(CONFIG_MACH_MT6877)
 			apusys_opps.is_power_on[EDMA2] == false &&
 #endif
 #endif
@@ -688,16 +693,11 @@ void apusys_dvfs_info(void)
 	int ret, ret_v, ret_f = 0;
 
 	ret = sprintf(log_str, "(u_op,T,min,max)");
-	if (ret < 0)
-		LOG_ERR("%s sprintf fail (%d)\n", __func__, ret);
-
 	ret_v = sprintf(logv_str, "v[");
-	if (ret_v < 0)
-		LOG_ERR("%s sprintf fail (%d)\n", __func__, ret_v);
-
 	ret_f = sprintf(logf_str, "f[");
-	if (ret_f < 0)
-		LOG_ERR("%s sprintf fail (%d)\n", __func__, ret_f);
+
+	if (ret < 0 || ret_v < 0 || ret_f < 0)
+		LOG_ERR("%s sprintf fail\n", __func__);
 
 	for (user = 0; user < APUSYS_DVFS_USER_NUM; user++) {
 		if (dvfs_user_support(user) == false)
@@ -727,32 +727,25 @@ void apusys_dvfs_info(void)
 		ret_v = sprintf(logv_str + strlen(logv_str), ",(%d,%d)",
 			apusys_opps.opps[c_opp_index][domain].voltage / div,
 			apusys_opps.opps[n_opp_index][domain].voltage / div);
-		if (ret_v < 0)
-			LOG_ERR("%s sprintf fail (%d)\n", __func__, ret_v);
 
 		ret_f = sprintf(logf_str + strlen(logf_str), ",(%d,%d)",
 			apusys_opps.opps[c_opp_index][domain].freq / div,
 			apusys_opps.opps[n_opp_index][domain].freq / div);
-		if (ret_f < 0)
-			LOG_ERR("%s sprintf fail (%d)\n", __func__, ret_f);
+
+		if (ret_v < 0 || ret_f < 0)
+			LOG_ERR("%s sprintf fail\n", __func__);
 	}
 
 	rem_nsec = do_div(apusys_opps.id, 1000000000);
 	ret = sprintf(log_str + strlen(log_str), "] [%5lu.%06lu]",
 		(unsigned long)apusys_opps.id, rem_nsec / 1000);
-	if (ret < 0)
-		LOG_ERR("%s sprintf fail (%d)\n", __func__, ret);
-
 	ret_v = sprintf(logv_str + strlen(logv_str), "] [%5lu.%06lu]",
 		(unsigned long)apusys_opps.id, rem_nsec / 1000);
-	if (ret_v < 0)
-		LOG_ERR("%s sprintf fail (%d)\n", __func__, ret_v);
-
 	ret_f = sprintf(logf_str + strlen(logf_str), "] [%5lu.%06lu]",
 		(unsigned long)apusys_opps.id, rem_nsec / 1000);
-	if (ret_f < 0)
-		LOG_ERR("%s sprintf fail (%d)\n", __func__, ret_f);
 
+	if (ret < 0 || ret_v < 0 || ret_f < 0)
+		LOG_ERR("%s sprintf fail\n", __func__);
 
 	PWR_LOG_PM("APUPWR DVFS %s\n", log_str);
 	PWR_LOG_PM("APUPWR DVFS %s\n", logv_str);

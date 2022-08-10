@@ -15,8 +15,10 @@
  *  membase is an 'ioremapped' cookie.
  */
 
+#ifndef OPLUS_FEATURE_CHG_BASIC
 #if defined(CONFIG_SERIAL_8250_CONSOLE) && defined(CONFIG_MAGIC_SYSRQ)
 #define SUPPORT_SYSRQ
+#endif
 #endif
 
 #include <linux/module.h>
@@ -710,7 +712,7 @@ EXPORT_SYMBOL_GPL(serial8250_rpm_put_tx);
  */
 static void serial8250_set_sleep(struct uart_8250_port *p, int sleep)
 {
-	unsigned char lcr = 0, efr = 0;
+	unsigned char efr = 0;
 	/*
 	 * Exar UARTs have a SLEEP register that enables or disables
 	 * each UART to enter sleep mode separately.  On the XR17V35x the
@@ -725,19 +727,26 @@ static void serial8250_set_sleep(struct uart_8250_port *p, int sleep)
 		goto out;
 	}
 
+	#define UART_EFR_MTK 0x26
+	#define UART_NEW_MAP 0x27
+
 	if (p->capabilities & UART_CAP_SLEEP) {
 		if (p->capabilities & UART_CAP_EFR) {
-			lcr = serial_in(p, UART_LCR);
-			efr = serial_in(p, UART_EFR);
-			serial_out(p, UART_LCR, UART_LCR_CONF_MODE_B);
-			serial_out(p, UART_EFR, UART_EFR_ECB);
-			serial_out(p, UART_LCR, 0);
+			//lcr = serial_in(p, UART_LCR);
+			//serial_out(p, UART_LCR, UART_LCR_CONF_MODE_B);
+			serial_out(p, UART_NEW_MAP, 0x1);
+			efr = serial_in(p, UART_EFR_MTK);
+			serial_out(p, UART_EFR_MTK, UART_EFR_ECB);
+			serial_out(p, UART_NEW_MAP, 0x0);
+			//serial_out(p, UART_LCR, 0);
 		}
 		serial_out(p, UART_IER, sleep ? UART_IERX_SLEEP : 0);
 		if (p->capabilities & UART_CAP_EFR) {
-			serial_out(p, UART_LCR, UART_LCR_CONF_MODE_B);
-			serial_out(p, UART_EFR, efr);
-			serial_out(p, UART_LCR, lcr);
+			//serial_out(p, UART_LCR, UART_LCR_CONF_MODE_B);
+			serial_out(p, UART_NEW_MAP, 0x1);
+			serial_out(p, UART_EFR_MTK, efr);
+			serial_out(p, UART_NEW_MAP, 0x0);
+			//serial_out(p, UART_LCR, lcr);
 		}
 	}
 out:
@@ -2746,8 +2755,9 @@ serial8250_do_set_termios(struct uart_port *port, struct ktermios *termios,
 			serial_port_out(port, UART_EFR, efr);
 	}
 
+#if 0
 	serial8250_set_divisor(port, baud, quot, frac);
-
+#endif
 	/*
 	 * LCR DLAB must be set to enable 64-byte FIFO mode. If the FCR
 	 * is written without DLAB set, this mode will be disabled.
@@ -2756,6 +2766,7 @@ serial8250_do_set_termios(struct uart_port *port, struct ktermios *termios,
 		serial_port_out(port, UART_FCR, up->fcr);
 
 	serial_port_out(port, UART_LCR, up->lcr);	/* reset DLAB */
+
 	if (port->type != PORT_16750) {
 		/* emulated UARTs (Lucent Venus 167x) need two steps */
 		if (up->fcr & UART_FCR_ENABLE_FIFO)

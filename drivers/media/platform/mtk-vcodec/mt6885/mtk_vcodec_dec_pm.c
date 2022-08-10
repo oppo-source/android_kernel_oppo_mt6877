@@ -29,8 +29,6 @@
 #include "smi_port.h"
 #endif
 
-#include "swpm_me.h"
-
 #if DEC_DVFS
 #include <linux/pm_qos.h>
 #include <mmdvfs_pmqos.h>
@@ -85,7 +83,6 @@ static struct ion_client *ion_vdec_client;
 void mtk_dec_init_ctx_pm(struct mtk_vcodec_ctx *ctx)
 {
 	ctx->input_driven = 0;
-	ctx->user_lock_hw = 1;
 }
 
 int mtk_vcodec_init_dec_pm(struct mtk_vcodec_dev *mtkdev)
@@ -175,7 +172,6 @@ void mtk_vcodec_dec_clock_on(struct mtk_vcodec_pm *pm, int hw_id)
 	struct mtk_vcodec_dev *dev;
 	void __iomem *vdec_racing_addr;
 
-	set_swpm_vdec_active(true);
 	time_check_start(MTK_FMT_DEC, hw_id);
 	if (hw_id == MTK_VDEC_CORE) {
 		smi_bus_prepare_enable(SMI_LARB4, "VDEC_CORE");
@@ -270,8 +266,6 @@ void mtk_vcodec_dec_clock_off(struct mtk_vcodec_pm *pm, int hw_id)
 
 	dev = container_of(pm, struct mtk_vcodec_dev, pm);
 	mtk_vdec_hw_break(dev, hw_id);
-
-	set_swpm_vdec_active(false);
 
 	if (hw_id == MTK_VDEC_CORE) {
 		clk_disable_unprepare(pm->clk_MT_CG_VDEC0);
@@ -809,6 +803,9 @@ void mtk_vdec_dvfs_begin(struct mtk_vcodec_ctx *ctx, int hw_id)
 		vdec_req_freq[hw_id] = STD_VDEC_FREQ;
 	}
 
+	if (ctx->q_data[MTK_Q_DATA_SRC].fmt->fourcc == V4L2_PIX_FMT_VP8)
+		vdec_req_freq[hw_id] = 416;
+
 	if (ctx->dec_params.operating_rate > 0) {
 		op_rate_to_freq = 416LL *
 				ctx->q_data[MTK_Q_DATA_DST].coded_width *
@@ -822,18 +819,10 @@ void mtk_vdec_dvfs_begin(struct mtk_vcodec_ctx *ctx, int hw_id)
 		vdec_req_freq[hw_id] = target_freq_64;
 	}
 
-	if (ctx->q_data[MTK_Q_DATA_SRC].fmt->fourcc == V4L2_PIX_FMT_MPEG1 ||
-	ctx->q_data[MTK_Q_DATA_SRC].fmt->fourcc == V4L2_PIX_FMT_MPEG2 ||
-	ctx->q_data[MTK_Q_DATA_SRC].fmt->fourcc == V4L2_PIX_FMT_MPEG4 ||
-	ctx->q_data[MTK_Q_DATA_SRC].fmt->fourcc == V4L2_PIX_FMT_H263 ||
-	ctx->q_data[MTK_Q_DATA_SRC].fmt->fourcc == V4L2_PIX_FMT_XVID)
-		vdec_req_freq[hw_id] = 312;
-
-	if (ctx->q_data[MTK_Q_DATA_SRC].fmt->fourcc == V4L2_PIX_FMT_VP8)
-		vdec_req_freq[hw_id] = 416;
-
-	if (ctx->q_data[MTK_Q_DATA_SRC].fmt->fourcc == V4L2_PIX_FMT_HEIF)
+	if (ctx->dev->dec_cnt > 1 ||
+		ctx->q_data[MTK_Q_DATA_SRC].fmt->fourcc == V4L2_PIX_FMT_HEIF) {
 		vdec_req_freq[hw_id] = 546;
+	}
 
 	vdec_freq = vdec_req_freq[0] > vdec_req_freq[1] ?
 			vdec_req_freq[0] : vdec_req_freq[1];
@@ -910,7 +899,6 @@ void mtk_vdec_emi_bw_begin(struct mtk_vcodec_ctx *ctx, int hw_id)
 	case V4L2_PIX_FMT_MPEG4:
 	case V4L2_PIX_FMT_H263:
 	case V4L2_PIX_FMT_S263:
-	case V4L2_PIX_FMT_XVID:
 	case V4L2_PIX_FMT_MPEG1:
 	case V4L2_PIX_FMT_MPEG2:
 		emi_bw = emi_bw * mp24_frm_scale[f_type] / (2 * STD_VDEC_FREQ);
@@ -1001,7 +989,6 @@ void mtk_vdec_emi_bw_begin(struct mtk_vcodec_ctx *ctx, int hw_id)
 		case V4L2_PIX_FMT_MPEG4:
 		case V4L2_PIX_FMT_H263:
 		case V4L2_PIX_FMT_S263:
-		case V4L2_PIX_FMT_XVID:
 		case V4L2_PIX_FMT_MPEG1:
 		case V4L2_PIX_FMT_MPEG2:
 			emi_bw_input = 15 * vdec_freq / STD_VDEC_FREQ;

@@ -21,6 +21,10 @@
 #include "ccci_config.h"
 #include "ccci_fsm_sys.h"
 
+//#ifdef OPLUS_FEATURE_MODEM_MINIDUMP
+#include <soc/oppo/mmkey_log.h>
+//#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
+
 #ifndef DB_OPT_DEFAULT
 #define DB_OPT_DEFAULT    (0)	/* Dummy macro define to avoid build error */
 #endif
@@ -34,8 +38,10 @@ static void ccci_aed_v3(struct ccci_fsm_ee *mdee, unsigned int dump_flag,
 {
 	void *ex_log_addr = NULL;
 	int ex_log_len = 0;
+#if defined(CONFIG_MTK_AEE_FEATURE)
 	void *md_img_addr = NULL;
 	int md_img_len = 0;
+#endif
 	int info_str_len = 0;
 	char *buff;		/*[AED_STR_LEN]; */
 #if defined(CONFIG_MTK_AEE_FEATURE)
@@ -52,6 +58,15 @@ static void ccci_aed_v3(struct ccci_fsm_ee *mdee, unsigned int dump_flag,
 	struct ccci_per_md *per_md_data = ccci_get_per_md_data(mdee->md_id);
 	int md_dbg_dump_flag = per_md_data->md_dbg_dump_flag;
 #endif
+
+//#ifdef OPLUS_FEATURE_MODEM_MINIDUMP
+    int temp_i;
+    int checkID = 0;
+    unsigned int hashId = 0;
+    char *logBuf;
+    char *aed_str_for_hash = NULL;
+//#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
+
 	int ret = 0;
 
 	if (!mem_layout) {
@@ -79,6 +94,50 @@ static void ccci_aed_v3(struct ccci_fsm_ee *mdee, unsigned int dump_flag,
 		CCCI_ERROR_LOG(md_id, FSM, "%s-%d:snprintf fail,ret = %d\n",
 			__func__, __LINE__, ret);
 	memset(mdee->ex_start_time, 0x0, sizeof(mdee->ex_start_time));
+//#ifdef OPLUS_FEATURE_MODEM_MINIDUMP
+  #define MCU_CORE_MSG "(MCU_core"
+  aed_str_for_hash = aed_str;
+  if( aed_str_for_hash != NULL ) {
+    if( (strncmp(aed_str_for_hash, MCU_CORE_MSG, strlen(MCU_CORE_MSG)) == 0) ) {
+      while(aed_str_for_hash[0] != '\n') {
+        ++aed_str_for_hash;
+      }
+      ++aed_str_for_hash; //skip '\n'
+    }
+    hashId = BKDRHash(aed_str_for_hash, strlen(aed_str_for_hash));
+  }
+  else {
+    CCCI_ERROR_LOG(md_id, FSM, "aed_str_for_hash is null!!");
+  }
+  logBuf = vmalloc(BUF_LOG_LENGTH);
+  if ((logBuf != NULL)&&(aed_str_for_hash != NULL)) {
+    for (temp_i = 0 ; (temp_i < BUF_LOG_LENGTH) && (temp_i < strlen(aed_str_for_hash)) ; temp_i++) {
+      /*
+      if(aed_str_for_hash[temp_i] == '\n') {
+        logBuf[temp_i] = '\0';
+        break;
+      }
+      logBuf[temp_i] = aed_str_for_hash[temp_i];
+      */
+     if(aed_str_for_hash[temp_i] == '\n') {
+          checkID++;
+          CCCI_ERROR_LOG(md_id, FSM, "checkID = %d",checkID);
+          if(2 == checkID) {
+              logBuf[temp_i] = '\0';
+              break;
+          }
+          logBuf[temp_i] = ' ';
+      }else {
+          logBuf[temp_i] = aed_str_for_hash[temp_i];
+      }
+      //end
+    }
+    logBuf[BUF_LOG_LENGTH - 1] = '\0';
+    CCCI_NORMAL_LOG(md_id, FSM, "modem crash wirte to critical log. hashid = %u, cause = %s.", hashId, logBuf);
+    mm_keylog_write_modemdump(hashId, logBuf, MODEM_MONITOR_ID, "modem");
+    vfree(logBuf);
+  }
+//#endif /*OPLUS_FEATURE_MODEM_MINIDUMP*/
 	/* MD ID must sync with aee_dump_ccci_debug_info() */
  err_exit1:
 	if (dump_flag & CCCI_AED_DUMP_CCIF_REG) {
@@ -96,10 +155,6 @@ static void ccci_aed_v3(struct ccci_fsm_ee *mdee, unsigned int dump_flag,
 	if (dump_flag & CCCI_AED_DUMP_EX_PKT) {
 		ex_log_addr = (void *)dumper->ex_pl_info;
 		ex_log_len = MD_HS1_FAIL_DUMP_SIZE;
-	}
-	if (dump_flag & CCCI_AED_DUMP_MD_IMG_MEM) {
-		md_img_addr = (void *)mem_layout->md_bank0.base_ap_view_vir;
-		md_img_len = MD_IMG_DUMP_SIZE;
 	}
 	if (buff == NULL) {
 		fsm_sys_mdee_info_notify(aed_str);

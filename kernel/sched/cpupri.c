@@ -33,6 +33,10 @@
 #include <linux/slab.h>
 #include "cpupri.h"
 
+#ifdef OPLUS_FEATURE_SCHED_ASSIST
+#include <linux/sched_assist/sched_assist_common.h>
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+
 /* Convert between a 140 based task->prio, and our 102 based cpupri */
 static int convert_prio(int prio)
 {
@@ -50,6 +54,9 @@ static int convert_prio(int prio)
 	return cpupri;
 }
 
+#if defined(OPLUS_FEATURE_SCHED_ASSIST)
+extern void drop_ux_task_cpus(struct task_struct *p, struct cpumask *lowest_mask);
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
 /**
  * cpupri_find - find the best (lowest-pri) CPU in the system
  * @cp: The cpupri context
@@ -65,6 +72,8 @@ static int convert_prio(int prio)
  *
  * Return: (int)bool - CPUs were found
  */
+extern bool oplus_task_misfit(struct task_struct *p, int cpu);
+extern void kick_min_cpu_from_mask(struct cpumask *lowest_mask);
 int cpupri_find(struct cpupri *cp, struct task_struct *p,
 		struct cpumask *lowest_mask)
 {
@@ -108,7 +117,17 @@ int cpupri_find(struct cpupri *cp, struct task_struct *p,
 
 		if (lowest_mask) {
 			cpumask_and(lowest_mask, &p->cpus_allowed, vec->mask);
-
+#if defined(OPLUS_FEATURE_SCHED_ASSIST)
+			if (sysctl_sched_assist_enabled)
+				drop_ux_task_cpus(p, lowest_mask);
+#endif /* OPLUS_FEATURE_SCHED_ASSIST */
+#if defined (CONFIG_SCHED_WALT) && defined (OPLUS_FEATURE_SCHED_ASSIST)
+		if (sysctl_sched_assist_enabled
+			&& is_sched_assist_scene()
+			&& oplus_task_misfit(p, task_cpu(p))) {
+			kick_min_cpu_from_mask(lowest_mask);
+		}
+#endif /* OPLUS_FEATURE_UIFIRST */
 			/*
 			 * We have to ensure that we have at least one bit
 			 * still set in the array, since the map could have

@@ -15,8 +15,11 @@
 
 #define CONFIG_MTK_UFS_DEBUG
 /* #define CONFIG_MTK_UFS_DEGUG_GPIO_TRIGGER */
+
+#ifndef CONFIG_FPGA_EARLY_PORTING
 #ifdef CONFIG_MTK_ENG_BUILD
 #define CONFIG_MTK_UFS_LBA_CRC16_CHECK
+#endif
 #endif
 
 #include <linux/of.h>
@@ -202,6 +205,8 @@ struct ufs_mtk_host {
 
 	/* passthrough keyhint if number of key slots is enough */
 	bool passthrough_keyhint;
+	bool qos_allowed;
+	bool qos_enabled;
 };
 
 enum {

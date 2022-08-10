@@ -20,7 +20,7 @@
 #include <linux/types.h>
 
 #include "../uapi/ion.h"
-
+#include <linux/atomic.h>
 struct ion_handle;
 struct ion_device;
 struct ion_heap;
@@ -109,6 +109,9 @@ struct ion_handle *ion_alloc(struct ion_client *client, size_t len,
 			     size_t align, unsigned int heap_id_mask,
 			     unsigned int flags);
 
+struct ion_handle *__ion_alloc(struct ion_client *client, size_t len,
+								size_t align, unsigned int heap_id_mask,
+								unsigned int flags, bool grab_handle);
 /**
  * ion_free - free a handle
  * @client:	the client

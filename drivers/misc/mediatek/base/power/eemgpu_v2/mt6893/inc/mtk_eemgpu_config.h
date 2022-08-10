@@ -21,7 +21,7 @@
 #define EARLY_PORTING		(0)
 #define DUMP_DATA_TO_DE		(1)
 #define EEMG_ENABLE		(1) /* enable; after pass HPT mini-SQC */
-#define EEMG_FAKE_EFUSE		(0)
+#define EEMG_FAKE_EFUSE		(1)
 //#define MT6885
 //#define MT6889
 //#define MC50_LOAD
@@ -92,13 +92,25 @@
 #define DEVINFO_4 0x0F192439
 
 #elif defined(MC50_LOAD)
-#define DEVINFO_0 0x0
+
+#if defined(MT6885)
+#define DEVINFO_0 0x0 /* MC50 Safe EFUSE */
 #define DEVINFO_1 0xA8FB1B03
-#define DEVINFO_2 0x3B1724BC
-#define DEVINFO_3 0x5BE824BC
-#define DEVINFO_4 0x07192454
+#define DEVINFO_2 0x2D15247F
+#define DEVINFO_3 0x7AE3247F
+#define DEVINFO_4 0x0F192439
+
+#elif defined(MT6889)
+#define DEVINFO_0 0x0 /* MC50 Safe EFUSE */
+#define DEVINFO_1 0xA8FB1B03
+#define DEVINFO_2 0x2D15247F
+#define DEVINFO_3 0x7AE3247F
+#define DEVINFO_4 0x0F192439
+
+#endif
 
 #else
+
 #define DEVINFO_0 0x0 /* MC50 Safe EFUSE */
 #define DEVINFO_1 0xA8FB1B03
 #define DEVINFO_2 0x2D15247F

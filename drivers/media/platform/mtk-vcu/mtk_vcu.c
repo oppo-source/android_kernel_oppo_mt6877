@@ -355,7 +355,7 @@ int vcu_ipi_register(struct platform_device *pdev,
 	unsigned int i = 0;
 
 	if (vcu == NULL) {
-		dev_err(&pdev->dev, "vcu device in not ready\n");
+		dev_info(&pdev->dev, "vcu device is not ready\n");
 		return -EPROBE_DEFER;
 	}
 
@@ -1009,17 +1009,15 @@ static int vcu_gce_cmd_flush(struct mtk_vcu *vcu,
 		(buff.cmdq_buff.secure == 0)?vcu_gce_timeout_callback:NULL;
 	pkt_ptr->err_cb.data = (void *)&vcu_ptr->gce_info[j].buff[i];
 
-	pr_info("[VCU][%d] %s: buff %p type %d cnt %d order %d pkt %p hndl %llx %d %d\n",
+	pr_info("[VCU][%d] %s: buff %p type %d cnt %d order %d hndl %llx %d %d\n",
 		core_id, __func__, &vcu_ptr->gce_info[j].buff[i],
 		buff.cmdq_buff.codec_type,
-		cmds->cmd_cnt, buff.cmdq_buff.flush_order, pkt_ptr,
+		cmds->cmd_cnt, buff.cmdq_buff.flush_order,
 		buff.cmdq_buff.gce_handle, ret, j);
 
 	/* flush cmd async */
-	ret = cmdq_pkt_flush_threaded(pkt_ptr,
+	cmdq_pkt_flush_threaded(pkt_ptr,
 		vcu_gce_flush_callback, (void *)&vcu_ptr->gce_info[j].buff[i]);
-	if (ret < 0)
-		pr_info("[VCU] cmdq flush fail pkt %p\n", pkt_ptr);
 
 	atomic_inc(&vcu_ptr->gce_info[j].flush_pending);
 	time_check_end(100, strlen(vcodec_param_string));
@@ -2001,15 +1999,9 @@ static long mtk_vcu_unlocked_compat_ioctl(struct file *file, unsigned int cmd,
 
 static int mtk_vcu_write(const char *val, const struct kernel_param *kp)
 {
-	long ret = -1;
-
 	if (vcu_ptr != NULL &&
 		vcu_ptr->vdec_log_info != NULL &&
 		val != NULL) {
-		ret = param_set_charp(val, kp);
-		if (ret != 0)
-			return -EINVAL;
-
 		memcpy(vcu_ptr->vdec_log_info->log_info,
 			val, strnlen(val, LOG_INFO_SIZE - 1) + 1);
 	} else
@@ -2039,7 +2031,6 @@ static int mtk_vcu_write(const char *val, const struct kernel_param *kp)
 
 static struct kernel_param_ops log_param_ops = {
 	.set = mtk_vcu_write,
-	.get = param_get_charp,
 };
 
 module_param_cb(test_info, &log_param_ops, &vcodec_param_string, 0644);
@@ -2072,13 +2063,13 @@ static int mtk_vcu_suspend(struct device *pDev)
 		pr_info("[VCU] %s fail due to videocodec activity\n", __func__);
 		return -EBUSY;
 	}
-	pr_info("[VCU] %s done\n", __func__);
+	pr_debug("[VCU] %s done\n", __func__);
 	return 0;
 }
 
 static int mtk_vcu_resume(struct device *pDev)
 {
-	pr_info("[VCU] %s done\n", __func__);
+	pr_debug("[VCU] %s done\n", __func__);
 	return 0;
 }
 
@@ -2096,7 +2087,7 @@ static int mtk_vcu_suspend_notifier(struct notifier_block *nb,
 {
 	int wait_cnt = 0;
 
-	pr_info("[VCU] %s ok action = %ld\n", __func__, action);
+	pr_debug("[VCU] %s ok action = %ld\n", __func__, action);
 	switch (action) {
 	case PM_SUSPEND_PREPARE:
 		vcu_ptr->is_entering_suspend = 1;

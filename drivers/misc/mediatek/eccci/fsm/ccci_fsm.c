@@ -23,6 +23,11 @@
 #include "modem_secure_base.h"
 #endif
 
+#ifndef CREATE_TRACE_POINTS
+#define CREATE_TRACE_POINTS
+#endif
+#include <mt-plat/ccci_events.h>
+
 static struct ccci_fsm_ctl *ccci_fsm_entries[MAX_MD_NUM];
 
 static void fsm_finish_command(struct ccci_fsm_ctl *ctl,
@@ -185,6 +190,11 @@ int ccci_fsm_increase_devapc_dump_counter(void)
 	return (++ s_devapc_dump_counter);
 }
 
+void __weak mtk_clear_md_violation(void)
+{
+	CCCI_ERROR_LOG(-1, FSM, "[%s] is not supported!\n", __func__);
+}
+
 /* cmd is not NULL only when reason is ordinary EE */
 static void fsm_routine_exception(struct ccci_fsm_ctl *ctl,
 	struct ccci_fsm_command *cmd, enum CCCI_EE_REASON reason)
@@ -199,6 +209,7 @@ static void fsm_routine_exception(struct ccci_fsm_ctl *ctl,
 		reason, __builtin_return_address(0));
 	fsm_monitor_send_message(ctl->md_id,
 		CCCI_MD_MSG_EXCEPTION, 0);
+	trace_ccci_event("ccci", "ap_md_reason", (unsigned int)reason, 0);
 	/* 1. state sanity check */
 	if (ctl->curr_state == CCCI_FSM_GATED) {
 		if (cmd)
@@ -246,9 +257,7 @@ static void fsm_routine_exception(struct ccci_fsm_ctl *ctl,
 		ccci_md_exception_handshake(ctl->md_id,
 			MD_EX_CCIF_TIMEOUT);
 #if (MD_GENERATION >= 6297)
-#ifndef MTK_EMI_MPU_DISABLE
 		mtk_clear_md_violation();
-#endif
 #endif
 		count = 0;
 		while (count < MD_EX_REC_OK_TIMEOUT/EVENT_POLL_INTEVAL) {
