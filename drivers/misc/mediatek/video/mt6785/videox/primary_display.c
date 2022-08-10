@@ -1296,8 +1296,7 @@ int primary_display_get_debug_state(char *stringbuf, int buf_len)
 	active_cfg = primary_display_get_current_cfg_id();
 #endif
 	/* print HRT table */
-	//copy_hrt_bound_table(0, hrt_table, active_cfg);
-	copy_hrt_bound_table(0, hrt_table);
+	copy_hrt_bound_table(0, hrt_table, active_cfg);
 	len += scnprintf(stringbuf + len, buf_len - len, "|HRT table=[");
 	for (i = 0; i < HRT_LEVEL_NUM-1; i++)
 		len += scnprintf(stringbuf + len, buf_len - len, "%d, ",
