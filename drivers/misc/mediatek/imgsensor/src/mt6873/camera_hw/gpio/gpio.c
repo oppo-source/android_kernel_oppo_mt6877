@@ -37,6 +37,7 @@ static enum IMGSENSOR_RETURN gpio_init(
 	struct IMGSENSOR_HW_DEVICE_COMMON *pcommon)
 {
 	int    i, j;
+	int sn_ret = 0;
 	struct GPIO            *pgpio            = (struct GPIO *)pinstance;
 	enum   IMGSENSOR_RETURN ret              = IMGSENSOR_RETURN_SUCCESS;
 	char str_pinctrl_name[LENGTH_FOR_SNPRINTF];
@@ -58,7 +59,7 @@ static enum IMGSENSOR_RETURN gpio_init(
 			gpio_pinctrl_list_cam[i].ppinctrl_lookup_names;
 
 			if (lookup_names) {
-				snprintf(str_pinctrl_name,
+				sn_ret = snprintf(str_pinctrl_name,
 				sizeof(str_pinctrl_name),
 				"cam%d_%s",
 				j,
@@ -67,6 +68,9 @@ static enum IMGSENSOR_RETURN gpio_init(
 					pinctrl_lookup_state(
 						pgpio->ppinctrl,
 						str_pinctrl_name);
+				if (sn_ret < 0)
+					pr_info("Notice: %s,snprintf error %d\n",
+						 __func__, sn_ret);
 			}
 
 			if (pgpio->ppinctrl_state_cam[j][i] == NULL ||
