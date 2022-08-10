@@ -1079,7 +1079,7 @@ page_owner=on loop.max_part=7";
 		< 725000 750000	 3    0x301  360   3     0x3     0>,
 		< 725000 750000	 3    0x301  416   4     0x3     0>;
 
-		scp-cores = <1>;
+		scp-cores = <2>;
 
 		pmic-sshub-support;
 		vow-lp-en-gear = <2>;
