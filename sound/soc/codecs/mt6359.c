@@ -6689,7 +6689,6 @@ static int get_hp_current_calibrate_val(struct mt6359_priv *priv)
 static int mt6359_codec_probe(struct snd_soc_component *cmpnt)
 {
 	struct mt6359_priv *priv = snd_soc_component_get_drvdata(cmpnt);
-	int ret;
 
 	snd_soc_component_init_regmap(cmpnt, priv->regmap);
 
@@ -6722,10 +6721,6 @@ static int mt6359_codec_probe(struct snd_soc_component *cmpnt)
 		dev_err(priv->dev, "%s(), have no vaud18 supply", __func__);
 		return PTR_ERR(priv->avdd_reg);
 	}
-
-	ret = regulator_enable(priv->avdd_reg);
-	if (ret)
-		return ret;
 
 	return 0;
 }
