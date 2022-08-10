@@ -165,7 +165,6 @@ DECLARE_WAIT_QUEUE_HEAD(decouple_update_rdma_wq);
 atomic_t decouple_trigger_event = ATOMIC_INIT(0);
 DECLARE_WAIT_QUEUE_HEAD(decouple_trigger_wq);
 wait_queue_head_t primary_display_present_fence_wq;
-static bool pf_thread_init;
 atomic_t primary_display_pt_fence_update_event = ATOMIC_INIT(0);
 static unsigned int _need_lfr_check(void);
 
@@ -2984,9 +2983,6 @@ static int _ovl_fence_release_callback(unsigned long userdata)
 	if ((primary_display_is_decouple_mode() == 0))
 		update_frm_seq_info(addr, 0, 2, FRM_START);
 
-	if (primary_display_is_video_mode())
-		primary_display_wakeup_pf_thread();
-
 	mmprofile_log_ex(ddp_mmp_get_events()->session_release,
 			 MMPROFILE_FLAG_END, 1, userdata);
 	return ret;
@@ -3637,7 +3633,6 @@ int primary_display_init(char *lcm_name, unsigned int lcm_fps,
 					_present_fence_release_worker_thread,
 				       NULL, "present_fence_worker");
 		wake_up_process(present_fence_release_worker_task);
-		pf_thread_init = true;
 	}
 
 	if (disp_helper_get_option(DISP_OPT_PERFORMANCE_DEBUG)) {
@@ -4757,21 +4752,9 @@ done:
 	return ret;
 }
 
-void primary_display_update_present_fence(struct cmdqRecStruct *cmdq_handle,
-	    unsigned int fence_idx)
+void primary_display_update_present_fence(unsigned int fence_idx)
 {
-	cmdqRecBackupUpdateSlot(cmdq_handle,
-			pgc->cur_config_fence,
-			disp_sync_get_present_timeline_id(),
-			fence_idx);
-
 	gPresentFenceIndex = fence_idx;
-}
-
-void primary_display_wakeup_pf_thread(void)
-{
-	if (!pf_thread_init)
-		return;
 	atomic_set(&primary_display_pt_fence_update_event, 1);
 	if (disp_helper_get_option(DISP_OPT_PRESENT_FENCE))
 		wake_up_interruptible(&primary_display_present_fence_wq);
@@ -5914,16 +5897,6 @@ int primary_display_frame_cfg(struct disp_frame_cfg_t *cfg)
 	primary_frame_cfg_input(cfg);
 	dprec_done(input_event, cfg->overlap_layer_num, 0);
 
-	if (cfg->present_fence_idx != (unsigned int)-1) {
-		struct cmdqRecStruct *cmdq_handle;
-
-		if (primary_display_is_decouple_mode())
-			cmdq_handle = pgc->cmdq_handle_ovl1to2_config;
-		else
-			cmdq_handle = pgc->cmdq_handle_config;
-		primary_display_update_present_fence(cmdq_handle, cfg->present_fence_idx);
-	}
-
 	if (cfg->output_en) {
 		dprec_start(output_event, cfg->present_fence_idx,
 			    cfg->output_cfg.buff_idx);
@@ -5939,6 +5912,9 @@ int primary_display_frame_cfg(struct disp_frame_cfg_t *cfg)
 			(current->comm[3] << 0);
 		dprec_start(trigger_event, cfg->present_fence_idx, proc_name);
 	}
+
+	if (cfg->present_fence_idx != (unsigned int)-1)
+		primary_display_update_present_fence(cfg->present_fence_idx);
 
 	primary_display_trigger_nolock(0, NULL, 0);
 
