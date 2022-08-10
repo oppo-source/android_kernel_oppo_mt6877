@@ -190,6 +190,7 @@ void sys_timer_timesync_verify_sspm(void)
 	struct plt_ipi_data_s ipi_data;
 #ifndef SSPM_V2
 	int ackdata = 0;
+	int ret = 0;
 #endif
 	u32 ts_h = 0, ts_l = 0;
 	u64 ts_sspm, ts_ap1, ts_ap2, temp_u64[2];
@@ -208,8 +209,12 @@ void sys_timer_timesync_verify_sspm(void)
 	ipi_data.cmd = PLT_TIMESYNC_SRAM_TEST;
 
 #ifndef SSPM_V2
-	sspm_ipi_send_sync(IPI_ID_PLATFORM, IPI_OPT_WAIT,
+	ret = sspm_ipi_send_sync(IPI_ID_PLATFORM, IPI_OPT_WAIT,
 		&ipi_data, sizeof(ipi_data) / SSPM_MBOX_SLOT_SIZE, &ackdata, 1);
+
+	if (ret != 0) {
+		pr_info("sspm_ipi_send_sync failed, ret=%d\n", ret);
+	}
 
 	/* wait until sspm writes sspm-view timestamp to sram */
 	while (1) {
