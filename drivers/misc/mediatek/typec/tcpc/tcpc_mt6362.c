@@ -1764,7 +1764,8 @@ static struct irq_mapping_tbl mt6362_vend_irq_mapping_tbl[] = {
 
 static int mt6362_alert_vendor_defined_handler(struct tcpc_device *tcpc)
 {
-	int ret, i, irqnum, irqbit;
+	int ret, i;
+	u8 irqnum, irqbit;
 	u8 alert[MT6362_VEND_INT_NUM];
 	u8 mask[MT6362_VEND_INT_NUM];
 	struct mt6362_tcpc_data *tdata = tcpc_get_dev_data(tcpc);
