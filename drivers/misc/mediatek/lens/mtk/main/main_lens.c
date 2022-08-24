@@ -171,8 +171,8 @@ static struct pinctrl_state *vcamaf_pio_on;
 static struct pinctrl_state *vcamaf_pio_off;
 
 #define CAMAF_PMIC     "camaf_m1_pmic"
-#define CAMAF_GPIO_ON  "camaf_m1_gpio_on"
-#define CAMAF_GPIO_OFF "camaf_m1_gpio_off"
+#define CAMAF_GPIO_ON  "cam0_ldo_vcamaf_1"
+#define CAMAF_GPIO_OFF "cam0_ldo_vcamaf_0"
 
 static void camaf_power_init(void)
 {
