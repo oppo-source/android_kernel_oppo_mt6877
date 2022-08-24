@@ -1229,23 +1229,24 @@ void set_scp_mpu(void)
 #else
 void set_scp_mpu(void)
 {
-	struct emimpu_region_t md_region;
+	struct emimpu_region_t md_region = {};
 
-	mtk_emimpu_init_region(&md_region, mpu_region_id);
-	mtk_emimpu_set_addr(&md_region, scp_mem_base_phys,
-		scp_mem_base_phys + scp_mem_size - 1);
-	mtk_emimpu_set_apc(&md_region, MPU_DOMAIN_D0,
-		MTK_EMIMPU_NO_PROTECTION);
-	mtk_emimpu_set_apc(&md_region, MPU_DOMAIN_D3,
-		MTK_EMIMPU_NO_PROTECTION);
-	if (mtk_emimpu_set_protection(&md_region))
-		pr_notice("[SCP]mtk_emimpu_set_protection fail\n");
-	mtk_emimpu_free_region(&md_region);
-	pr_notice("[SCP] MPU protect SCP Share region<%d:%08llx:%08llx>\n",
-			md_region.rg_num,
-			(uint64_t)md_region.start,
-			(uint64_t)md_region.end);
+	int ret = mtk_emimpu_init_region(&md_region, mpu_region_id);
 
+	if (ret == -1) {
+		pr_notice("[SCP] %s: emimpu_region init fail\n", __func__);
+		WARN_ON(1);
+	} else {
+		mtk_emimpu_set_addr(&md_region, scp_mem_base_phys,
+			scp_mem_base_phys + scp_mem_size - 1);
+		mtk_emimpu_set_apc(&md_region, MPU_DOMAIN_D0,
+			MTK_EMIMPU_NO_PROTECTION);
+		mtk_emimpu_set_apc(&md_region, MPU_DOMAIN_D3,
+			MTK_EMIMPU_NO_PROTECTION);
+		if (mtk_emimpu_set_protection(&md_region))
+			pr_notice("[SCP]mtk_emimpu_set_protection fail\n");
+		mtk_emimpu_free_region(&md_region);
+	}
 }
 #endif
 #endif
