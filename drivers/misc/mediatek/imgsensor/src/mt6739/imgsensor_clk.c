@@ -86,9 +86,7 @@ int imgsensor_clk_set(struct IMGSENSOR_CLK *pclk,
 		if (pmclk->freq == supported_mclk_freq[mclk_index])
 			break;
 	}
-	if (pmclk->TG >= IMGSENSOR_CCF_MCLK_TG_MAX_NUM ||
-		pmclk->TG < IMGSENSOR_CCF_MCLK_TG_MIN_NUM ||
-		mclk_index == MCLK_MAX) {
+	if (pmclk->TG >= IMGSENSOR_CCF_MCLK_TG_MAX_NUM || mclk_index == MCLK_MAX) {
 		pr_err("[CAMERA SENSOR]kdSetSensorMclk out of range, tg=%d, freq= %d\n",
 			pmclk->TG, pmclk->freq);
 		return -EFAULT;

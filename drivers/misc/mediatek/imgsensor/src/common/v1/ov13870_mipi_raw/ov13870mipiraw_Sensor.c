@@ -1488,8 +1488,7 @@ static kal_uint32 set_max_framerate_by_scenario(
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.dummy_line = (frame_length > imgsensor_info.custom1.framelength)
 			? (frame_length - imgsensor_info.custom1.framelength) : 0;
-		if (imgsensor.dummy_line < 0)
-			imgsensor.dummy_line = 0;
+
 		imgsensor.frame_length = imgsensor_info.custom1.framelength + imgsensor.dummy_line;
 		imgsensor.min_frame_length = imgsensor.frame_length;
 		spin_unlock(&imgsensor_drv_lock);
