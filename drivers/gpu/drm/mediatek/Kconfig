@@ -83,3 +83,12 @@ config MTK_SLD_SUPPORT
 	  without changing backlight brightness.
 	  If you want to enable this feature, set Y.
 	  If unsure, set N.
+
+config MTK_HDMI_SUPPORT
+	bool "MTK_HDMI_SUPPORT"
+	default n
+	help
+	  DRM/KMS DPTX driver for Mediatek SoCs
+	  Choose this option if you want to enable
+	  DPTX driver, and this config depends on
+	  DRM_MEDIATEK.
