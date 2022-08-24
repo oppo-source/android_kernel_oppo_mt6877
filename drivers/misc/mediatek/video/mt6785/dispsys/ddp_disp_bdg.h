@@ -12,7 +12,7 @@
 #include "lcm_drv.h"
 #include <linux/interrupt.h>
 
-#define HW_NUM			(1)
+#define HW_NUM			(2)
 #define RX_V12			(1700)
 #ifdef CONFIG_MTK_MT6382_VDO_MODE
 #define _VDO_120FPS_
