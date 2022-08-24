@@ -22,6 +22,9 @@ subdir-ccflags-y += -I$(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION) \
 	-I$(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/seninf/ \
 	-I$(MTK_DRIVER_PATH)/mmdvfs \
 	-I$(srctree)/drivers/i2c/busses/
+ifeq ($(CONFIG_MTK_PLATFORM), "mt6873")
+subdir-ccflags-y += -DIMGSENSOR_MT6873
+endif
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor.o
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor.o
 obj-y				+= ../common/$(COMMON_VERSION)/imgsensor_hw.o
