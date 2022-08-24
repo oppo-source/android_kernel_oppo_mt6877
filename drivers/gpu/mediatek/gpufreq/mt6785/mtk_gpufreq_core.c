@@ -49,6 +49,10 @@
 #include "mtk_static_power_mt6785.h"
 #endif
 
+#ifdef CONFIG_MTK_DEVINFO
+#include <linux/nvmem-consumer.h>
+#endif
+
 /**
  * ===============================================
  * SECTION : Local functions declaration
