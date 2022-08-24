@@ -571,6 +571,12 @@ page_owner=on loop.max_part=7";
 			clock-frequency = <26000000>;
 		};
 
+		clk13m: clk13m {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <13000000>;
+		};
+
 		clk32k: clk32k {
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
@@ -792,14 +798,6 @@ page_owner=on loop.max_part=7";
 		};
 	};
 
-	apxgpt@10008000 {
-		compatible = "mediatek,apxgpt";
-		reg = <0 0x10008000 0 0x1000>;
-		interrupts = <GIC_SPI 203 IRQ_TYPE_LEVEL_LOW>;
-		clocks =
-			<&clk32k>;
-	};
-
 	rsvd@10009000 {
 		compatible = "mediatek,rsvd";
 		reg = <0 0x10009000 0 0x1000>;
@@ -993,12 +991,13 @@ page_owner=on loop.max_part=7";
 		      <0 0x0800000c 0 0x0004>;
 	};
 
-	sys_timer@10017000 {
-		compatible = "mediatek,sys_timer";
+	systimer: systimer@10017000 {
+		compatible = "mediatek,mt6768-timer",
+			      "mediatek,mt6765-timer",
+			      "mediatek,sys_timer";
 		reg = <0 0x10017000 0 0x1000>;
-		reg-names = "sys_timer_base";
 		interrupts = <GIC_SPI 224 IRQ_TYPE_LEVEL_HIGH>;
-		clocks = <&topckgen TOP_CLK13M>;
+		clocks = <&clk13m>;
 	};
 
 	timer: timer {
