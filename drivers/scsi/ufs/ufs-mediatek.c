@@ -1952,7 +1952,6 @@ static void ufs_mtk_auto_hibern8(struct ufs_hba *hba, bool enable)
 	if (!ufs_mtk_has_broken_auto_hibern8(hba))
 		return;
 
-	dev_dbg(hba->dev, "%s: ah8: %d, ahit: 0x%x\n", __func__, enable, hba->ahit);
 	ufs_mtk_auto_hibern8_update(hba, enable);
 }
 
