@@ -1464,14 +1464,27 @@ void DSI_Config_VDO_Timing_with_DSC(struct mtk_dsi *dsi)
 	unsigned int t_hbllp, ps_wc, ap_tx_total_word_cnt_no_hfp_wc, ap_tx_total_word_cnt;
 	unsigned int ap_tx_line_cycle, ap_tx_cycle_time;
 	struct videomode *vm = &dsi->vm;
+	struct dynamic_mipi_params *dyn = NULL;
 	u32 t_vfp = vm->vfront_porch;
 	u32 t_vbp = vm->vback_porch;
-	u32	t_vsa = vm->vsync_len;
+	u32 t_vsa = vm->vsync_len;
 	u32 t_hfp = vm->hfront_porch;
 	u32 t_hbp = vm->hback_porch;
 	u32 t_hsa = vm->hsync_len;
 	u32 width = mtk_dsi_get_virtual_width(dsi, dsi->encoder.crtc);
 	u32 height = mtk_dsi_get_virtual_heigh(dsi, dsi->encoder.crtc);
+
+	if (dsi->ext && dsi->ext->params)
+		dyn = &dsi->ext->params->dyn;
+
+	if (dsi->bdg_mipi_hopping_sta && dyn) {
+		if (!!dyn->vfp)
+			t_vfp = dyn->vfp;
+		if (!!dyn->vbp)
+			t_vbp = dyn->vbp;
+		if (!!dyn->vsa)
+			t_vsa = dyn->vsa;
+	}
 
 	DDPDBG(
 	"[DISP]-kernel-%s,t_vsa=%d, t_vbp=%d, t_vfp=%d, t_hsa=%d, t_hbp=%d, t_hfp=%d\n",
@@ -2485,6 +2498,9 @@ static void mtk_dsi_porch_setting_6382(struct mtk_dsi *dsi, struct cmdq_pkt *han
 	if (dsi->ext->params->is_cphy) {
 		DDPMSG("C-PHY mode, need check!!!\n");
 	} else {
+		if (bg_tx_data_phy_cycle == 0)
+			bdg_tx_data_phy_cycle_calc(dsi);
+
 		data_init_byte = bg_tx_data_phy_cycle * dsi->lanes;
 
 		if (dsi->mode_flags & MIPI_DSI_MODE_VIDEO) {
@@ -2689,6 +2705,8 @@ static void mtk_dsi_clk_change_6382(struct mtk_dsi *dsi, int en)
 		cmdq_pkt_wait_no_clear(cmdq_handle,
 			mtk_crtc->gce_obj.event[EVENT_CMD_EOF]);
 
+		mtk_dsi_porch_config(dsi, cmdq_handle);
+
 		mtk_ddp_comp_io_cmd(output_comp, cmdq_handle, DSI_STOP_VDO_MODE,
 			NULL);
 
@@ -2722,6 +2740,38 @@ done:
 			dsi->mode_flags,
 			(ext->params->dyn.data_rate << 16) |
 			ext->params->dyn.pll_clk);
+}
+
+void mtk_dsi_porch_config(struct mtk_dsi *dsi, struct cmdq_pkt *handle)
+{
+	u32 t_vfp = 0, t_vbp = 0, t_vsa = 0;
+	struct dynamic_mipi_params *dyn = NULL;
+
+	if (dsi->ext && dsi->ext->params)
+		dyn = &dsi->ext->params->dyn;
+
+	if (dyn && dyn->vfp) {
+		if (dsi->bdg_mipi_hopping_sta)
+			t_vfp = dyn->vfp;
+		else
+			t_vfp = dsi->vm.vfront_porch;
+		mtk_dsi_porch_setting(&dsi->ddp_comp, handle, DSI_VFP, t_vfp);
+	}
+	if (dyn && dyn->vbp) {
+		if (dsi->bdg_mipi_hopping_sta)
+			t_vbp = dyn->vbp;
+		else
+			t_vbp = dsi->vm.vback_porch;
+		mtk_dsi_porch_setting(&dsi->ddp_comp, handle, DSI_VBP, t_vbp);
+	}
+	if (dyn && dyn->vsa) {
+		if (dsi->bdg_mipi_hopping_sta)
+			t_vsa = dyn->vsa;
+		else
+			t_vsa = dsi->vm.vsync_len;
+		mtk_dsi_porch_setting(&dsi->ddp_comp, handle, DSI_VSA, t_vsa);
+	}
+	DDPINFO("%s,t_vfp=%d,t_vbp=%d,t_vsa=%d\n", __func__, t_vfp, t_vbp, t_vsa);
 }
 #endif
 
@@ -6050,6 +6100,7 @@ static void mtk_dsi_vdo_timing_change(struct mtk_dsi *dsi,
 	struct mtk_drm_crtc *mtk_crtc, struct drm_crtc_state *old_state)
 {
 	unsigned int vfp = 0;
+	unsigned int t_vfp = 0;
 	unsigned int hfp = 0;
 	unsigned int fps_chg_index = 0;
 	struct cmdq_pkt *handle;
@@ -6163,16 +6214,23 @@ static void mtk_dsi_vdo_timing_change(struct mtk_dsi *dsi,
 			kfree(cb_data);
 			return;
 		}
-		if (dsi->mipi_hopping_sta && dsi->ext->params->dyn.vfp) {
+		vfp = adjusted_mode.vsync_start - adjusted_mode.vdisplay;
+		if ((dsi->mipi_hopping_sta
+#ifdef CONFIG_MTK_MT6382_BDG
+			|| dsi->bdg_mipi_hopping_sta
+#endif
+			) && dsi->ext->params->dyn.vfp) {
 			DDPINFO("%s,mipi_clk_change_sta\n", __func__);
-			vfp = dsi->ext->params->dyn.vfp;
+			t_vfp = dsi->ext->params->dyn.vfp;
 		} else
-			vfp = adjusted_mode.vsync_start -
-				adjusted_mode.vdisplay;
+			t_vfp = vfp;
 
-		dsi->vm.vfront_porch = vfp;
-
-		mtk_dsi_porch_setting(comp, handle, DSI_VFP, vfp);
+		dsi->vm.vfront_porch = t_vfp;
+#ifdef CONFIG_MTK_MT6382_BDG
+		if (dsi->bdg_mipi_hopping_sta)
+			dsi->vm.vfront_porch = vfp;
+#endif
+		mtk_dsi_porch_setting(comp, handle, DSI_VFP, t_vfp);
 
 #ifdef CONFIG_MTK_MT6382_BDG
 		mtk_dsi_vfp_porch_setting_6382(dsi, vfp, handle);
@@ -6212,6 +6270,7 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 	struct drm_display_mode **mode;
 	bool *enable;
 	unsigned int vfp_low_power = 0;
+	unsigned int vfp_lp_dyn = 0;
 
 	switch (cmd) {
 	case REQ_PANEL_EXT:
@@ -6275,22 +6334,25 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 	{
 		panel_ext = mtk_dsi_get_panel_ext(comp);
 
-		if (dsi->mipi_hopping_sta && panel_ext && panel_ext->params
-			&& panel_ext->params->dyn.vfp_lp_dyn)
-			vfp_low_power = panel_ext->params->dyn.vfp_lp_dyn;
-		else if (panel_ext && panel_ext->params
-			&& panel_ext->params->vfp_low_power)
+		if (panel_ext && panel_ext->params && panel_ext->params->vfp_low_power)
 			vfp_low_power = panel_ext->params->vfp_low_power;
-		if (vfp_low_power) {
-			DDPINFO("vfp_low_power=%d\n", vfp_low_power);
+		if ((dsi->mipi_hopping_sta
+#ifdef CONFIG_MTK_MT6382_BDG
+			|| dsi->bdg_mipi_hopping_sta
+#endif
+			) && panel_ext && panel_ext->params && panel_ext->params->dyn.vfp_lp_dyn)
+			vfp_lp_dyn = panel_ext->params->dyn.vfp_lp_dyn;
+		else
+			vfp_lp_dyn = vfp_low_power;
+		if (vfp_low_power && vfp_lp_dyn) {
+			DDPINFO("vfp_low_power=%d,vfp_lp_dyn=%d\n", vfp_low_power, vfp_lp_dyn);
 #ifdef CONFIG_MTK_MT6382_BDG
 			mtk_dsi_stop_vdo_mode(dsi, handle);
 #endif
-			mtk_dsi_porch_setting(comp, handle, DSI_VFP,
-					vfp_low_power);
+			mtk_dsi_porch_setting(comp, handle, DSI_VFP, vfp_lp_dyn);
 			if (dsi->slave_dsi)
 				mtk_dsi_porch_setting(&dsi->slave_dsi->ddp_comp, handle, DSI_VFP,
-					vfp_low_power);
+					vfp_lp_dyn);
 #ifdef CONFIG_MTK_MT6382_BDG
 			mtk_dsi_vfp_porch_setting_6382(dsi, vfp_low_power, handle);
 			mtk_dsi_start_vdo_mode(comp, handle);
@@ -6303,6 +6365,7 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 	case DSI_VFP_DEFAULT_MODE:
 	{
 		unsigned int vfront_porch = 0;
+		unsigned int mod_vfront_porch = 0;
 		struct mtk_drm_crtc *crtc = comp->mtk_crtc;
 
 		panel_ext = mtk_dsi_get_panel_ext(comp);
@@ -6312,13 +6375,17 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 			break;
 		}
 
-		if (dsi->mipi_hopping_sta &&
-			panel_ext->params->dyn.vfp)
-			vfront_porch = panel_ext->params->dyn.vfp;
+		vfront_porch = dsi->vm.vfront_porch;
+		if ((dsi->mipi_hopping_sta
+#ifdef CONFIG_MTK_MT6382_BDG
+			|| dsi->bdg_mipi_hopping_sta
+#endif
+			) && panel_ext->params->dyn.vfp)
+			mod_vfront_porch = panel_ext->params->dyn.vfp;
 		else
-			vfront_porch = dsi->vm.vfront_porch;
+			mod_vfront_porch = vfront_porch;
 
-		DDPINFO("vfront_porch=%d\n", vfront_porch);
+		DDPINFO("vfront_porch=%d,mod_vfront_porch=%d\n", vfront_porch, mod_vfront_porch);
 
 		if (panel_ext && panel_ext->params->wait_sof_before_dec_vfp) {
 			cmdq_pkt_clear_event(handle,
@@ -6329,11 +6396,10 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 #ifdef CONFIG_MTK_MT6382_BDG
 		mtk_dsi_stop_vdo_mode(dsi, handle);
 #endif
-		mtk_dsi_porch_setting(comp, handle, DSI_VFP,
-					vfront_porch);
+		mtk_dsi_porch_setting(comp, handle, DSI_VFP, mod_vfront_porch);
 		if (dsi->slave_dsi)
 			mtk_dsi_porch_setting(&dsi->slave_dsi->ddp_comp, handle, DSI_VFP,
-					vfront_porch);
+					mod_vfront_porch);
 #ifdef CONFIG_MTK_MT6382_BDG
 		mtk_dsi_vfp_porch_setting_6382(dsi, vfront_porch, handle);
 		mtk_dsi_start_vdo_mode(comp, handle);
