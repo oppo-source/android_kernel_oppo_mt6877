@@ -1930,14 +1930,18 @@ static void set_md_ccif5_dummy(void)
 {
 	void __iomem *pericfg_dummy;
 	unsigned int pericfg_addr;
+	char *ap_platform = NULL;
 
+	ap_platform = ccci_get_ap_platform();
 #if (MD_GENERATION == 6295)
-	if (!strncmp(platform_mt6779, ccci_get_ap_platform(), PLATFORM_AP_LEN))
+	if ((ap_platform != NULL) &&
+		(!strncmp(platform_mt6779, ap_platform, PLATFORM_AP_LEN)))
 		pericfg_addr = 0x1000122c;
 	else
 		pericfg_addr = 0x1000322c;
 #elif (MD_GENERATION == 6297)
-	if (!strncmp(platform_mt6877, ccci_get_ap_platform(), PLATFORM_AP_LEN))
+	if ((ap_platform != NULL) &&
+		(!strncmp(platform_mt6877, ap_platform, PLATFORM_AP_LEN)))
 		pericfg_addr = 0x10003200;
 	else
 		pericfg_addr = 0x1000330c;
