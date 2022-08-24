@@ -2420,6 +2420,11 @@ static int ISP_WaitIrq(struct ISP_WAIT_IRQ_STRUCT *WaitIrq)
 		return -EFAULT;
 	}
 
+	if ((idx < 0) || (idx >= 32)) {
+		LOG_NOTICE("[Error] %s : Invalid idx = %d\n",  __func__, idx);
+		return -EFAULT;
+	}
+
 #ifdef ENABLE_WAITIRQ_LOG
 	/* Debug interrupt */
 	if (IspInfo.DebugMask & ISP_DBG_INT) {
