@@ -72,7 +72,7 @@ int get_layering_opt(enum LYE_HELPER_OPT opt)
 #ifdef CONFIG_MTK_ROUND_CORNER_SUPPORT
 void set_round_corner_opt(enum LYE_HELPER_OPT opt, int value)
 {
-	if (opt >= LYE_OPT_NUM || opt < 0) {
+	if (opt >= LYE_OPT_NUM) {
 		DISPMSG("%s invalid round corner opt:%d\n", __func__, opt);
 		return;
 	}
@@ -82,7 +82,7 @@ void set_round_corner_opt(enum LYE_HELPER_OPT opt, int value)
 
 int get_round_corner_opt(enum LYE_HELPER_OPT opt)
 {
-	if (opt >= LYE_OPT_NUM || opt < 0) {
+	if (opt >= LYE_OPT_NUM) {
 		DISPMSG("%s invalid round corner opt:%d\n", __func__, opt);
 		return -1;
 	}
@@ -2355,8 +2355,6 @@ static int load_hrt_test_data(struct disp_layer_info *disp_info)
 				is_test_pass = false;
 			}
 
-			if (!tok)
-				goto end;
 			tok = parse_hrt_data_value(tok, &hrt_num);
 			if (!tok)
 				goto end;
