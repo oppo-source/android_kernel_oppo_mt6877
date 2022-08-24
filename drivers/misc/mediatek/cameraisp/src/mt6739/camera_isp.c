@@ -8738,7 +8738,7 @@ static signed int ISP_WaitIrq_v3(struct ISP_WAIT_IRQ_STRUCT *WaitIrq)
 				gEismetaRIdx = (gEismetaWIdx - gEismetaInSOF - 1);
 			}
 
-			if ((gEismetaRIdx < 0) || (gEismetaRIdx >= EISMETA_RINGSIZE)) {
+			if (gEismetaRIdx >= EISMETA_RINGSIZE) {
 				/* BUG_ON(1); */
 				gEismetaRIdx = 0;
 				/* TBD WARNING */
