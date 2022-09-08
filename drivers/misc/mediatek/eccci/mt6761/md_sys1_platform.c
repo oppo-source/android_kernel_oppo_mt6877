@@ -49,6 +49,23 @@ static struct ccci_clk_node clk_table[] = {
 	{ NULL,	"scp-sys-md1-main"},
 
 };
+
+
+struct ccci_md_regulator {
+	struct regulator *reg_ref;
+	unsigned char *reg_name;
+	unsigned long reg_vol0;
+	unsigned long reg_vol1;
+};
+
+static struct ccci_md_regulator md_reg_table[] = {
+	{ NULL, "md_vmodem", 800000, 800000},
+//	{ NULL, "md_vnr", 800000, 800000},
+//	{ NULL, "md_vmdfe", 800000, 800000},
+//	{ NULL, "md_vdigrf", 800000, 800000},
+};
+
+
 #if defined(CONFIG_PINCTRL_ELBRUS)
 static struct pinctrl *mdcldma_pinctrl;
 #endif
@@ -804,18 +821,63 @@ static void md_cd_dump_debug_register(struct ccci_modem *md)
 
 }
 
-//static void md_cd_check_md_DCM(struct md_cd_ctrl *md_ctrl)
-//{
-//}
+
 
 static void md_cd_check_emi_state(struct ccci_modem *md, int polling)
 {
+}
+
+//------------------------------------------------------------------------
+static void md1_pmic_setting_init(struct platform_device *plat_dev)
+{
+	int idx, ret = 0;
+	int value[2] = { 0, 0 };
+
+	if (plat_dev->dev.of_node == NULL) {
+		CCCI_ERROR_LOG(0, TAG, "modem OF node NULL\n");
+		return;
+	}
+
+	CCCI_BOOTUP_LOG(-1, TAG, "get pmic setting\n");
+	for (idx = 0; idx < ARRAY_SIZE(md_reg_table); idx++) {
+		md_reg_table[idx].reg_ref =
+			devm_regulator_get_optional(&plat_dev->dev,
+			md_reg_table[idx].reg_name);
+		/* get regulator fail and set reg_vol=0 */
+		if (IS_ERR(md_reg_table[idx].reg_ref)) {
+			ret = PTR_ERR(md_reg_table[idx].reg_ref);
+			if ((ret != -ENODEV) && plat_dev->dev.of_node) {
+				CCCI_ERROR_LOG(-1, TAG,
+					"%s:get regulator(%s) fail, ret = %d\n",
+					__func__, md_reg_table[idx].reg_name, ret);
+				md_reg_table[idx].reg_vol0 = 0;
+				md_reg_table[idx].reg_vol0 = 0;
+			}
+		} else {
+			/* get regulator success and get value from dts */
+			ret = of_property_read_u32_array(plat_dev->dev.of_node,
+				md_reg_table[idx].reg_name, value, ARRAY_SIZE(value));
+			if (!ret) {
+				/* get value success, and update table voltage value */
+				md_reg_table[idx].reg_vol0 = value[0];
+				md_reg_table[idx].reg_vol1 = value[1];
+			} else
+				CCCI_ERROR_LOG(-1, TAG, "update vol:%s fail ret=%d\n",
+					md_reg_table[idx].reg_name, ret);
+
+			CCCI_BOOTUP_LOG(-1, TAG,
+				"get regulator(%s=%ld %lu) successfully\n",
+				md_reg_table[idx].reg_name,
+				md_reg_table[idx].reg_vol0, md_reg_table[idx].reg_vol1);
+		}
+	}
 }
 
 static int md_start_platform(struct ccci_modem *md)
 {
 	int ret = 0;
 
+	md1_pmic_setting_init(md->plat_dev);
 	reg_vmodem = devm_regulator_get_optional(&md->plat_dev->dev, "_vmodem");
 	if (IS_ERR(reg_vmodem)) {
 		ret = PTR_ERR(reg_vmodem);
@@ -838,25 +900,63 @@ static int md_start_platform(struct ccci_modem *md)
 	return ret;
 }
 
+
 static void md1_pmic_setting_on(void)
 {
-	int ret = 0;
+	int ret = -1, idx;
 
-	ret = regulator_set_voltage(reg_vmodem, 800000, 800000);
-	if (ret)
-		CCCI_ERROR_LOG(-1, TAG, "pmic_vmodem setting on fail\n");
-	ret = regulator_sync_voltage(reg_vmodem);
-	if (ret)
-		CCCI_ERROR_LOG(-1, TAG, "pmic_vmodem setting on fail\n");
+	CCCI_BOOTUP_LOG(-1, TAG, "[POWER ON]%s start\n", __func__);
+	CCCI_NORMAL_LOG(-1, TAG, "[POWER ON]%s start\n", __func__);
 
-//	ret = regulator_set_voltage(reg_vsram, 800000, 800000);
-//	if (ret)
-//		CCCI_ERROR_LOG(-1, TAG, "pmic_vsram setting on fail\n");
-//	ret = regulator_sync_voltage(reg_vsram);
-//	if (ret)
-//		CCCI_ERROR_LOG(-1, TAG, "pmic_vsram setting on fail\n");
+	for (idx = 0; idx < ARRAY_SIZE(md_reg_table); idx++) {
+		if (IS_ERR(md_reg_table[idx].reg_ref)) {
+			ret = PTR_ERR(md_reg_table[idx].reg_ref);
+			if (ret != -ENODEV) {
+				CCCI_ERROR_LOG(-1, TAG,
+					"%s:get regulator(%s) fail, ret = %d\n",
+					__func__, md_reg_table[idx].reg_name, ret);
+				CCCI_BOOTUP_LOG(-1, TAG, "bypass pmic_%s set\n",
+						md_reg_table[idx].reg_name);
+				continue;
+			}
+		} else {
+			/* VMODEM+NR+FE->2ms->VSRAM_MD */
+			if (strcmp(md_reg_table[idx].reg_name,
+				"md_vsram") == 0)
+				udelay(2000);
+			ret = regulator_set_voltage(md_reg_table[idx].reg_ref,
+				md_reg_table[idx].reg_vol0,
+				md_reg_table[idx].reg_vol1);
+			if (ret) {
+				CCCI_ERROR_LOG(-1, TAG, "pmic_%s set fail\n",
+					md_reg_table[idx].reg_name);
+				continue;
+			} else
+				CCCI_BOOTUP_LOG(-1, TAG,
+					"[POWER ON]pmic set_voltage %s=%ld uV\n",
+					md_reg_table[idx].reg_name,
+					md_reg_table[idx].reg_vol0);
+
+			ret = regulator_sync_voltage(
+				md_reg_table[idx].reg_ref);
+			if (ret)
+				CCCI_ERROR_LOG(-1, TAG, "pmic_%s sync fail\n",
+					md_reg_table[idx].reg_name);
+			else
+				CCCI_BOOTUP_LOG(-1, TAG,
+					"[POWER ON]pmic get_voltage %s=%d uV\n",
+					md_reg_table[idx].reg_name,
+					regulator_get_voltage(
+					md_reg_table[idx].reg_ref));
+		}
+	}
+	CCCI_BOOTUP_LOG(-1, TAG, "[POWER ON]%s end\n", __func__);
+	CCCI_NORMAL_LOG(-1, TAG, "[POWER ON]%s end\n", __func__);
 
 }
+
+
+//------------------------------------------------------------------------
 
 static void md1_pre_access_md_reg(struct ccci_modem *md)
 {
