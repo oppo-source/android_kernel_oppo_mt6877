@@ -1701,6 +1701,7 @@
 		bootmode = <&chosen>;
 		gauge_name = "gauge";
 		alias_name = "MT6358";
+		vbif28-supply = <&mt_pmic_vbif28_ldo_reg>;
 	};
 
 #if (CONFIG_MTK_GAUGE_VERSION == 30)
