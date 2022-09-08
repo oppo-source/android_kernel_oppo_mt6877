@@ -667,7 +667,7 @@ static int rt9458_charger_dump_registers(struct charger_device *chg_dev)
 	if (ret < 0)
 		dev_info(ri->dev, "get cv fail\n");
 	ret = rt9458_charger_get_charging_stat(chg_dev, &chg_stat);
-	if (ret < 0 || chg_stat >= RT9458_CHG_STAT_MAX || chg_stat < 0) {
+	if (ret < 0 || chg_stat >= RT9458_CHG_STAT_MAX) {
 		dev_info(ri->dev, "get charger status fail\n");
 		chg_stat = RT9458_CHG_STAT_READY;
 	}
