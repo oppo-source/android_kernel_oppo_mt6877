@@ -1235,6 +1235,9 @@
 		clocks = <&scpsys SCP_SYS_MD1>;
 		clock-names = "scp-sys-md1-main";
 		ccci-infracfg = <&infracfg_ao>;
+		ccci_gpio_vsram-supply = <&mt_pmic_vsram_others_ldo_reg>;
+		/* WK for power plan change */
+		pmic,ccci_gpio = <&pio 200 0x0>;
 	};
 
 	radio_md_cfg:radio_md_cfg {
@@ -5122,4 +5125,10 @@
 #ifdef CONFIG_MTK_ENABLE_GENIEZONE
 #include "mediatek/trusty.dtsi"
 #endif
-
+&mddriver {
+		/* for md pmic voltage setting*/
+		md_vmodem-supply = <&mt_pmic_vmodem_buck_reg>;
+		md_vmodem = <875000 875000>;
+		md_vsram-supply = <&mt_pmic_vsram_core_ldo_reg>;
+		md_vsram = <993750 993750>;
+};
