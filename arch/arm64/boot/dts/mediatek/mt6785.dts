@@ -6006,3 +6006,10 @@ page_owner=on loop.max_part=7";
 #ifdef CONFIG_MTK_ENABLE_GENIEZONE
 #include "mediatek/trusty.dtsi"
 #endif
+&mddriver {
+		/* for md pmic voltage setting*/
+		md_vmodem-supply = <&mt_pmic_vmodem_buck_reg>;
+		md_vmodem = <875000 875000>;
+		md_vsram-supply = <&mt_pmic_vsram_proc2_ldo_reg>;
+		md_vsram = <993750 993750>;
+};
