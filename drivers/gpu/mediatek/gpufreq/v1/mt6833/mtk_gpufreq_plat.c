@@ -1807,6 +1807,8 @@ static unsigned int __mt_gpufreq_get_segment_id(void)
 		segment_id = MT6833M_SEGMENT;    /* 5G-CM */
 		break;
 	case 0x06:
+	case 0x07:
+	case 0x08:
 		segment_id = MT6833T_SEGMENT;    /* 5G-C+ */
 		break;
 	default:
