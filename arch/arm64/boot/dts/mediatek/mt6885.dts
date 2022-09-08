@@ -8550,7 +8550,17 @@ page_owner=on loop.max_part=7";
 	regulator-min-microvolt = <3000000>;
 	regulator-max-microvolt = <3000000>;
 };
-
+&mddriver {
+		/* for md pmic voltage setting*/
+		md_vmodem-supply = <&mt6315_3_vbuck1>;
+		md_vmodem = <825000 825000>;
+		md_vsram-supply = <&mt6315_3_vbuck4>;
+		md_vsram = <825000 825000>;
+		md_vnr-supply = <&mt6315_3_vbuck3>;
+		md_vnr = <825000 825000>;
+		md_vdigrf-supply = <&mt_pmic_vpu_buck_reg>;
+		md_vdigrf = <700000 700000>;
+};
 #ifdef CONFIG_MTK_ENABLE_GENIEZONE
 #include "mediatek/trusty.dtsi"
 #endif
