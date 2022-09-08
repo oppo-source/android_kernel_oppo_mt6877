@@ -3300,6 +3300,7 @@ page_owner=on loop.max_part=7";
 		mediatek,chain_length = <0x4c08>;
 		mediatek,rg_dfd_timeout = <0xa0>;
 		mediatek,check_dfd_support = <1>;
+		mediatek,dfd_latch_offset = <0x44>;
 	};
 
 	dfd_cache: dfd_cache {
