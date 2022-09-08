@@ -24,7 +24,8 @@
 #include <linux/platform_device.h>
 #include <mt-plat/upmu_common.h>
 #include "vibrator.h"
-
+#include "vibrator_hal.h"
+#include <linux/regulator/consumer.h>
 struct vibrator_hw *pvib_cust;
 
 static int debug_enable_vib_hal = 1;
@@ -35,14 +36,16 @@ static int debug_enable_vib_hal = 1;
 	} \
 } while (0)
 
-void vibr_Enable_HW(void)
+void vibr_Enable_HW(struct regulator *reg)
 {
-	pmic_set_register_value(PMIC_RG_LDO_VIBR_EN, 1);
+	if (regulator_enable(reg))
+		pr_notice("set vibr_reg enable failed!\n");
 }
 
-void vibr_Disable_HW(void)
+void vibr_Disable_HW(struct regulator *reg)
 {
-	pmic_set_register_value(PMIC_RG_LDO_VIBR_EN, 0);
+	if (regulator_disable(reg))
+		pr_notice("set vibr_reg enable failed!\n");
 }
 
 void init_vibr_oc_handler(void (*vibr_oc_func)(void))
