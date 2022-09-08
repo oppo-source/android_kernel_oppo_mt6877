@@ -54,8 +54,10 @@
 #include "modem_secure_base.h"
 #include "hif/ccci_hif_dpmaif.h"
 #include <linux/regulator/consumer.h> /* for MD PMIC */
+#ifdef CCCI_PLATFORM_MT6781
 #include <linux/of_gpio.h>
 #include <dt-bindings/pinctrl/mt6771-pinfunc.h>
+#endif
 
 static struct ccci_clk_node clk_table[] = {
 	{ NULL,	"scp-sys-md1-main"},
