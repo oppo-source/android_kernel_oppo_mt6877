@@ -53,11 +53,31 @@
 #endif
 #include "modem_secure_base.h"
 #include "hif/ccci_hif_dpmaif.h"
+#include <linux/regulator/consumer.h> /* for MD PMIC */
+#include <linux/of_gpio.h>
+#include <dt-bindings/pinctrl/mt6771-pinfunc.h>
 
 static struct ccci_clk_node clk_table[] = {
 	{ NULL,	"scp-sys-md1-main"},
 
 };
+
+struct ccci_md_regulator {
+	struct regulator *reg_ref;
+	unsigned char *reg_name;
+	unsigned long reg_vol0;
+	unsigned long reg_vol1;
+};
+
+static struct ccci_md_regulator md_reg_table[] = {
+	{ NULL, "md_vmodem", 800000, 800000},
+//	{ NULL, "md_vcore", 800000, 800000},
+	{ NULL, "md_vsram", 993750, 993750},
+};
+
+#ifdef CCCI_PLATFORM_MT6781
+static unsigned int g_is_new_power_grid;
+#endif
 
 #define TAG "mcd"
 
@@ -556,15 +576,172 @@ static void md_cd_check_emi_state(struct ccci_modem *md, int polling)
 {
 }
 
-void md1_pmic_setting_on(void)
+//----------------------------------------------------------------
+
+
+static void md1_pmic_setting_init(struct platform_device *plat_dev)
 {
-	vmd1_pmic_setting_on();
+	int idx, ret = 0;
+	int value[2] = { 0, 0 };
+
+#ifdef CCCI_PLATFORM_MT6781
+	unsigned int GPIO200_idx = 0;
+
+	if (plat_dev->dev.of_node == NULL) {
+		CCCI_ERROR_LOG(0, TAG, "modem OF node NULL\n");
+		return;
+	}
+	GPIO200_idx = of_get_named_gpio(plat_dev->dev.of_node, "pmic,ccci_gpio", 0);
+	if (gpio_get_value(GPIO200_idx))
+		g_is_new_power_grid = 1;
+	pr_info("[PMIC] (GPIO200)(%d) = %d\n", GPIO200_idx, g_is_new_power_grid);
+	if(g_is_new_power_grid) {
+		CCCI_BOOTUP_LOG(-1, TAG, "[MT6781] get pmic setting start gird = %d\n",
+			g_is_new_power_grid);
+		/* update md_reg_table reg_ref to 6362 reg_ref */
+		md_reg_table[0].reg_ref = devm_regulator_get_optional(&plat_dev->dev, "md_vmodem");
+		md_reg_table[1].reg_ref = devm_regulator_get_optional(&plat_dev->dev,
+			"ccci_gpio_vsram");
+		if (IS_ERR(md_reg_table[0].reg_ref)
+			|| IS_ERR(md_reg_table[1].reg_ref)) {
+			CCCI_NORMAL_LOG(-1, TAG, "ccci %s regulator get failed\n", __func__);
+		}
+	} else {
+		CCCI_BOOTUP_LOG(-1, TAG, "[MT6781] get pmic setting start\n");
+		if (plat_dev->dev.of_node == NULL) {
+			CCCI_ERROR_LOG(0, TAG, "modem OF node NULL\n");
+			return;
+		}
+		for (idx = 0; idx < ARRAY_SIZE(md_reg_table); idx++) {
+			md_reg_table[idx].reg_ref =
+			devm_regulator_get_optional(&plat_dev->dev,
+			md_reg_table[idx].reg_name);
+			/* get regulator fail and set reg_vol=0 */
+			if (IS_ERR(md_reg_table[idx].reg_ref)) {
+				ret = PTR_ERR(md_reg_table[idx].reg_ref);
+				if ((ret != -ENODEV) && plat_dev->dev.of_node) {
+					CCCI_ERROR_LOG(-1, TAG,
+						"%s:get regulator(%s) fail, ret = %d\n",
+						__func__, md_reg_table[idx].reg_name, ret);
+					md_reg_table[idx].reg_vol0 = 0;
+					md_reg_table[idx].reg_vol0 = 0;
+				}
+			} else {
+				/* get regulator success and get value from dts */
+				CCCI_BOOTUP_LOG(-1, TAG, "get of_property_read_u32_array\n");
+				ret = of_property_read_u32_array(plat_dev->dev.of_node,
+				md_reg_table[idx].reg_name, value, ARRAY_SIZE(value));
+				if (!ret) {
+					/* get value success, and update table voltage value */
+					md_reg_table[idx].reg_vol0 = value[0];
+					md_reg_table[idx].reg_vol1 = value[1];
+				} else
+					CCCI_ERROR_LOG(-1, TAG, "update vol:%s fail ret=%d\n",
+						md_reg_table[idx].reg_name, ret);
+				CCCI_BOOTUP_LOG(-1, TAG,
+					"get regulator(%s=%ld %lu) successfully\n",
+					md_reg_table[idx].reg_name,
+					md_reg_table[idx].reg_vol0, md_reg_table[idx].reg_vol1);
+				}
+		}
+
+	}
+
+#else
+	CCCI_BOOTUP_LOG(-1, TAG, "get pmic setting\n");
+	if (plat_dev->dev.of_node == NULL) {
+		CCCI_ERROR_LOG(0, TAG, "modem OF node NULL\n");
+		return;
+	}
+	for (idx = 0; idx < ARRAY_SIZE(md_reg_table); idx++) {
+		md_reg_table[idx].reg_ref =
+		devm_regulator_get_optional(&plat_dev->dev,
+		md_reg_table[idx].reg_name);
+	/* get regulator fail and set reg_vol=0 */
+	if (IS_ERR(md_reg_table[idx].reg_ref)) {
+		ret = PTR_ERR(md_reg_table[idx].reg_ref);
+		if ((ret != -ENODEV) && plat_dev->dev.of_node) {
+			CCCI_ERROR_LOG(-1, TAG,
+				"%s:get regulator(%s) fail, ret = %d\n",
+				__func__, md_reg_table[idx].reg_name, ret);
+			md_reg_table[idx].reg_vol0 = 0;
+			md_reg_table[idx].reg_vol0 = 0;
+		}
+	} else {
+		/* get regulator success and get value from dts */
+		ret = of_property_read_u32_array(plat_dev->dev.of_node,
+			md_reg_table[idx].reg_name, value, ARRAY_SIZE(value));
+		if (!ret) {
+			/* get value success, and update table voltage value */
+			md_reg_table[idx].reg_vol0 = value[0];
+			md_reg_table[idx].reg_vol1 = value[1];
+		} else
+			CCCI_ERROR_LOG(-1, TAG, "update vol:%s fail ret=%d\n",
+				md_reg_table[idx].reg_name, ret);
+
+		CCCI_BOOTUP_LOG(-1, TAG,
+			"get regulator(%s=%ld %lu) successfully\n",
+			md_reg_table[idx].reg_name,
+			md_reg_table[idx].reg_vol0, md_reg_table[idx].reg_vol1);
+	}
+}
+#endif
+
 }
 
-/* callback for system power off*/
-void ccci_power_off(void)
+//---------------------------------------------------------------------------------------------
+static void md1_pmic_setting_on(void)
 {
-	md1_pmic_setting_on();
+	int ret = -1, idx;
+
+	CCCI_BOOTUP_LOG(-1, TAG, "[POWER ON]%s start\n", __func__);
+	CCCI_NORMAL_LOG(-1, TAG, "[POWER ON]%s start\n", __func__);
+
+	for (idx = 0; idx < ARRAY_SIZE(md_reg_table); idx++) {
+		if (IS_ERR(md_reg_table[idx].reg_ref)) {
+			ret = PTR_ERR(md_reg_table[idx].reg_ref);
+			if (ret != -ENODEV) {
+				CCCI_ERROR_LOG(-1, TAG,
+					"%s:get regulator(%s) fail, ret = %d\n",
+					__func__, md_reg_table[idx].reg_name, ret);
+				CCCI_BOOTUP_LOG(-1, TAG, "bypass pmic_%s set\n",
+						md_reg_table[idx].reg_name);
+				continue;
+			}
+		} else {
+			/* VMODEM+NR+FE->2ms->VSRAM_MD */
+			if (strcmp(md_reg_table[idx].reg_name,
+				"md_vsram") == 0)
+				udelay(2000);
+			ret = regulator_set_voltage(md_reg_table[idx].reg_ref,
+				md_reg_table[idx].reg_vol0,
+				md_reg_table[idx].reg_vol1);
+			if (ret) {
+				CCCI_ERROR_LOG(-1, TAG, "pmic_%s set fail\n",
+					md_reg_table[idx].reg_name);
+				continue;
+			} else
+				CCCI_BOOTUP_LOG(-1, TAG,
+					"[POWER ON]pmic set_voltage %s=%ld uV\n",
+					md_reg_table[idx].reg_name,
+					md_reg_table[idx].reg_vol0);
+
+			ret = regulator_sync_voltage(
+				md_reg_table[idx].reg_ref);
+			if (ret)
+				CCCI_ERROR_LOG(-1, TAG, "pmic_%s sync fail\n",
+					md_reg_table[idx].reg_name);
+			else
+				CCCI_BOOTUP_LOG(-1, TAG,
+					"[POWER ON]pmic get_voltage %s=%d uV\n",
+					md_reg_table[idx].reg_name,
+					regulator_get_voltage(
+					md_reg_table[idx].reg_ref));
+		}
+	}
+	CCCI_BOOTUP_LOG(-1, TAG, "[POWER ON]%s end\n", __func__);
+	CCCI_NORMAL_LOG(-1, TAG, "[POWER ON]%s end\n", __func__);
+
 }
 
 void __attribute__((weak)) kicker_pbm_by_md(enum pbm_kicker kicker,
@@ -597,10 +774,12 @@ static int md_start_platform(struct ccci_modem *md)
 	int ret = -1;
 	int retval = 0;
 
+	md1_pmic_setting_init(md->plat_dev);
 	if ((md->per_md_data.config.setting&MD_SETTING_FIRST_BOOT) == 0)
 		return 0;
 
 	node = of_find_compatible_node(NULL, NULL, "mediatek,security_ao");
+
 	if (node) {
 		sec_ao_base = of_iomap(node, 0);
 		if (sec_ao_base == NULL) {
