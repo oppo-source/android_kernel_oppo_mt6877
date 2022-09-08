@@ -177,9 +177,6 @@ int msdc_sd_power_switch(struct msdc_host *host, u32 on)
 {
 #ifdef POWER_READY
 	if (host->id == 1) {
-		pmic_config_interface(REG_VMC_VOSEL_CAL,
-			VMC_VOSEL_CAL_mV(SD1V8_VOL_ACTUAL - VOL_1800),
-			MASK_VMC_VOSEL_CAL, SHIFT_VMC_VOSEL_CAL);
 		msdc_ldo_power(on, host->mmc->supply.vqmmc, VOL_1800,
 			&host->power_io);
 		/* For 1.8V 28mm, Set TDSEL as 0, Set RDSEL as 0 */
@@ -206,9 +203,6 @@ void msdc_power_calibration_init(struct msdc_host *host)
 {
 #ifdef POWER_READY
 	if (host->hw->host_function == MSDC_EMMC) {
-		pmic_config_interface(REG_VEMC_VOSEL_CAL,
-			VEMC_VOSEL_CAL_mV(EMMC_VOL_ACTUAL - VOL_3000),
-			MASK_VEMC_VOSEL_CAL, SHIFT_VEMC_VOSEL_CAL);
 
 	} else if (host->hw->host_function == MSDC_SD) {
 		/* move to msdc_sd_power() and msdc_sd_power_switch()
@@ -300,14 +294,6 @@ void msdc_sd_power(struct msdc_host *host, u32 on)
 		msdc_set_rdsel(host, MSDC_TDRDSEL_CUST, 0xC);
 		if (host->hw->flags & MSDC_SD_NEED_POWER)
 			card_on = 1;
-		if (on) {
-			pmic_config_interface(REG_VMCH_VOSEL_CAL,
-				VMCH_VOSEL_CAL_mV(SD_VOL_ACTUAL - VOL_3000),
-				MASK_VMCH_VOSEL_CAL, SHIFT_VMCH_VOSEL_CAL);
-			pmic_config_interface(REG_VMC_VOSEL_CAL,
-				VMC_VOSEL_CAL_mV(SD_VOL_ACTUAL - VOL_3000),
-				MASK_VMC_VOSEL_CAL, SHIFT_VMC_VOSEL_CAL);
-		}
 		/* VMCH VOLSEL */
 		msdc_ldo_power(card_on, host->mmc->supply.vmmc, VOL_3000,
 			&host->power_flash);
@@ -465,12 +451,6 @@ void msdc_HQA_set_voltage(struct msdc_host *host)
 	vcore = vcore_orig - val_delta;
 	vio_cal = 10; /* MT6357 support at most +10 steps */
 	#endif
-
-	pmic_config_interface(REG_VCORE_VOSEL, vcore,
-		MASK_VCORE_VOSEL, SHIFT_VCORE_VOSEL);
-
-	pmic_config_interface(REG_VIO18_VOCAL, vio_cal,
-		MASK_VIO18_VOCAL, SHIFT_VIO18_VOCAL);
 
 	pr_info("[MSDC%d HQA] adj Vcore 0x%x, Vio_cal 0x%x\n",
 		host->id, vcore, vio_cal);
