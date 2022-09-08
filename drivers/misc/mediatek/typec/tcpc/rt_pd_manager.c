@@ -747,7 +747,7 @@ static int __init rt_pd_manager_init(void)
 {
 	return platform_driver_register(&rt_pd_manager_driver);
 }
-late_initcall(rt_pd_manager_init);
+late_initcall_sync(rt_pd_manager_init);
 
 static void __exit rt_pd_manager_exit(void)
 {
