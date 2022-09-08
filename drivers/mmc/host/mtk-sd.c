@@ -3025,6 +3025,8 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	 * device_rename will free pdev->name
 	 */
 	pdev->name = kstrdup(pdev->name, GFP_KERNEL);
+/* temp patch to boot MT6779 EMMC */
+#ifndef CONFIG_MACH_MT6779
 	/* device rename */
 	if (boot_type == BOOTDEV_SDMMC){
 		if ((mmc->index == 0) && !device_rename(mmc->parent, "bootdevice"))
@@ -3039,7 +3041,7 @@ static int msdc_drv_probe(struct platform_device *pdev)
 		else
 			dev_info(&pdev->dev, "[msdc%d] error: rename faile.\n", mmc->index);
 	}
-
+#endif
 	dup_name = pdev->name;
 	pdev->name = pdev->dev.kobj.name;
 	kfree_const(dup_name);
