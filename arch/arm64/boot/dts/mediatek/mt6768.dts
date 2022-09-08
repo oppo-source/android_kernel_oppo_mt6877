@@ -1299,11 +1299,8 @@ page_owner=on loop.max_part=7";
 			"infra-ccif1-md",
 			"infra-ccif2-ap",
 			"infra-ccif2-md";
-		_vmodem-supply = <&mt_pmic_vmodem_buck_reg>;
-		_vcore-supply = <&mt_pmic_vcore_buck_reg>;
 		ccci-infracfg = <&infracfg_ao>;
 	};
-
 	md_auxadc:md_auxadc {
 		compatible = "mediatek,md_auxadc";
 		io-channels = <&auxadc 2>;
@@ -4191,3 +4188,9 @@ defined(CONFIG_MTK_CAM_SECURITY_SUPPORT)
 #ifdef CONFIG_MTK_ENABLE_GENIEZONE
 #include "mediatek/trusty.dtsi"
 #endif
+
+&mddriver {
+		/* for md pmic voltage setting*/
+		md_vmodem-supply = <&mt_pmic_vmodem_buck_reg>;
+		md_vmodem = <750000 750000>;
+};
