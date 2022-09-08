@@ -2880,7 +2880,6 @@ static int mt6360_pmu_chg_get_property(struct power_supply *psy,
 
 	val->intval = 0;
 
-	dev_dbg(mpci->dev, "%s: prop = %d\n", __func__, psp);
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
 		ret = mt6360_pmu_chg_get_online(mpci, val);
