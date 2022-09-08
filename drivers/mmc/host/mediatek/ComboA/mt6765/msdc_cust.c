@@ -449,9 +449,6 @@ void msdc_HQA_set_voltage(struct msdc_host *host)
 	vio18_cal = 0;
 #endif
 
-	pmic_config_interface(REG_VCORE_VOSEL_SW, vcore,
-		VCORE_VOSEL_SW_MASK, VCORE_VOSEL_SW_SHIFT);
-
 	if (vio18_cal)
 		pmic_config_interface(REG_VIO_VOCAL_SW, vio18_cal,
 			VIO_VOCAL_SW_MASK, VIO_VOCAL_SW_SHIFT);
