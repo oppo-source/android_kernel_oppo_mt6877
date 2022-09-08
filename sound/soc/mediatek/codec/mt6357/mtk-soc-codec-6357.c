@@ -4539,7 +4539,8 @@ static bool TurnOnADcPowerACC(int ADCType, bool enable)
 				/* Audio L preamplifier input sel :
 				 * AIN0. Enable audio L PGA
 				 */
-				Ana_Set_Reg(AUDENC_ANA_CON0, 0x0041, 0xf0ff);
+				Ana_Set_Reg(AUDENC_ANA_CON0, 0x0041, 0x00c1);
+				usleep_range(1000, 1020);
 				/* Audio L ADC input sel :
 				 * L PGA. Enable audio L ADC
 				 */
@@ -4550,7 +4551,8 @@ static bool TurnOnADcPowerACC(int ADCType, bool enable)
 				/* Audio L preamplifier input sel :
 				 * AIN1. Enable audio L PGA
 				 */
-				Ana_Set_Reg(AUDENC_ANA_CON0, 0x0081, 0xf0ff);
+				Ana_Set_Reg(AUDENC_ANA_CON0, 0x0081, 0x00c1);
+				usleep_range(1000, 1020);
 				/* Audio L ADC input sel :
 				 * L PGA. Enable audio L ADC
 				 */
@@ -4561,10 +4563,12 @@ static bool TurnOnADcPowerACC(int ADCType, bool enable)
 			/* Audio R preamplifier input sel :
 			 * AIN2. Enable audio R PGA
 			 */
-			Ana_Set_Reg(AUDENC_ANA_CON1, 0x00c1, 0xf0ff);
+			Ana_Set_Reg(AUDENC_ANA_CON1, 0x00c1, 0x00c1);
+			usleep_range(1000, 1020);
 			/* Audio R ADC input sel : R PGA. Enable audio R ADC */
 			Ana_Set_Reg(AUDENC_ANA_CON1, 0x50c1, 0xf000);
 		}
+		usleep_range(1000, 1020);
 		if (GetAdcStatus() == false) {
 			/* here to set digital part */
 			/* AdcClockEnable(true); */
@@ -4806,10 +4810,11 @@ static bool TurnOnADcPowerDCC(int ADCType, bool enable, int ECMmode)
 				/* Audio L preamplifier input sel :
 				 * AIN0. Enable audio L PGA
 				 */
-				Ana_Set_Reg(AUDENC_ANA_CON0, 0x0041, 0xf0ff);
+				Ana_Set_Reg(AUDENC_ANA_CON0, 0x0041, 0x00c1);
 				/* Audio L preamplifier DCCEN */
 				Ana_Set_Reg(AUDENC_ANA_CON0,
 					    0x1 << 1, 0x1 << 1);
+				usleep_range(1000, 1020);
 				/* Audio L ADC input sel :
 				 * L PGA. Enable audio L ADC
 				 */
@@ -4820,15 +4825,19 @@ static bool TurnOnADcPowerDCC(int ADCType, bool enable, int ECMmode)
 				/* Audio L preamplifier input sel :
 				 * AIN1. Enable audio L PGA
 				 */
-				Ana_Set_Reg(AUDENC_ANA_CON0, 0x0081, 0xf0ff);
+				Ana_Set_Reg(AUDENC_ANA_CON0, 0x0081, 0x00c1);
 				/* Audio L preamplifier DCCEN */
 				Ana_Set_Reg(AUDENC_ANA_CON0,
 					    0x1 << 1, 0x1 << 1);
+				usleep_range(1000, 1020);
 				/* Audio L ADC input sel :
 				 * L PGA. Enable audio L ADC
 				 */
 				Ana_Set_Reg(AUDENC_ANA_CON0, 0x5081, 0xf000);
 			}
+			usleep_range(1000, 1020);
+			/* Audio L preamplifier DCC precharge off */
+			Ana_Set_Reg(AUDENC_ANA_CON0, 0x0, 0x1 << 2);
 		} else if (ADCType == AUDIO_ANALOG_DEVICE_IN_ADC2) {
 			/* Audio R preamplifier DCC precharge */
 			Ana_Set_Reg(AUDENC_ANA_CON1, 0x0004, 0xf8ff);
@@ -4836,18 +4845,17 @@ static bool TurnOnADcPowerDCC(int ADCType, bool enable, int ECMmode)
 			/* Audio R preamplifier input sel :
 			 * AIN2. Enable audio R PGA
 			 */
-			Ana_Set_Reg(AUDENC_ANA_CON1, 0x00c1, 0xf0ff);
+			Ana_Set_Reg(AUDENC_ANA_CON1, 0x00c1, 0x00c1);
 			/* Audio R preamplifier DCCEN */
 			Ana_Set_Reg(AUDENC_ANA_CON1, 0x1 << 1, 0x1 << 1);
+			usleep_range(1000, 1020);
 			/* Audio R ADC input sel : R PGA Enable audio R ADC */
 			Ana_Set_Reg(AUDENC_ANA_CON1, 0x50c1, 0xf000);
-		}
-		if (GetAdcStatus() == false) {
+			usleep_range(1000, 1020);
 			/* Audio R preamplifier DCC precharge off */
 			Ana_Set_Reg(AUDENC_ANA_CON1, 0x0, 0x1 << 2);
-			/* Audio L preamplifier DCC precharge off */
-			Ana_Set_Reg(AUDENC_ANA_CON0, 0x0, 0x1 << 2);
-
+		}
+		if (GetAdcStatus() == false) {
 			/* here to set digital part */
 			/* power on clock */
 			Ana_Set_Reg(PMIC_AUDIO_TOP_CON0, 0x8000, 0xdfbf);
