@@ -1499,8 +1499,6 @@ static kal_uint32 set_max_framerate_by_scenario(
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.dummy_line = (frame_length > imgsensor_info.custom2.framelength)
 			? (frame_length - imgsensor_info.custom2.framelength) : 0;
-		if (imgsensor.dummy_line < 0)
-			imgsensor.dummy_line = 0;
 		imgsensor.frame_length = imgsensor_info.custom2.framelength + imgsensor.dummy_line;
 		imgsensor.min_frame_length = imgsensor.frame_length;
 		spin_unlock(&imgsensor_drv_lock);
@@ -1511,8 +1509,6 @@ static kal_uint32 set_max_framerate_by_scenario(
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.dummy_line = (frame_length > imgsensor_info.custom3.framelength)
 			? (frame_length - imgsensor_info.custom3.framelength) : 0;
-		if (imgsensor.dummy_line < 0)
-			imgsensor.dummy_line = 0;
 		imgsensor.frame_length = imgsensor_info.custom3.framelength + imgsensor.dummy_line;
 		imgsensor.min_frame_length = imgsensor.frame_length;
 		spin_unlock(&imgsensor_drv_lock);
@@ -1523,8 +1519,6 @@ static kal_uint32 set_max_framerate_by_scenario(
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.dummy_line = (frame_length > imgsensor_info.custom4.framelength)
 			? (frame_length - imgsensor_info.custom4.framelength) : 0;
-		if (imgsensor.dummy_line < 0)
-			imgsensor.dummy_line = 0;
 		imgsensor.frame_length = imgsensor_info.custom4.framelength + imgsensor.dummy_line;
 		imgsensor.min_frame_length = imgsensor.frame_length;
 		spin_unlock(&imgsensor_drv_lock);
@@ -1535,8 +1529,6 @@ static kal_uint32 set_max_framerate_by_scenario(
 		spin_lock(&imgsensor_drv_lock);
 		imgsensor.dummy_line = (frame_length > imgsensor_info.custom5.framelength)
 			? (frame_length - imgsensor_info.custom5.framelength) : 0;
-		if (imgsensor.dummy_line < 0)
-			imgsensor.dummy_line = 0;
 		imgsensor.frame_length = imgsensor_info.custom5.framelength + imgsensor.dummy_line;
 		imgsensor.min_frame_length = imgsensor.frame_length;
 		spin_unlock(&imgsensor_drv_lock);
