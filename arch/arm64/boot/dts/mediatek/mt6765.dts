@@ -3835,8 +3835,3 @@ firmware_class.path=/vendor/firmware";
 #include "mediatek/rt9471.dtsi"
 #endif
 #include "mediatek/trusty.dtsi"
-&mddriver {
-		/* for md pmic voltage setting*/
-		md_vmodem-supply = <&mt_pmic_vmodem_buck_reg>;
-		md_vmodem = <800000 800000>;
-};
