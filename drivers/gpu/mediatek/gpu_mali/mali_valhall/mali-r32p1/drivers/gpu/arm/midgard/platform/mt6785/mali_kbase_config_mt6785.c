@@ -133,8 +133,7 @@ static int pm_callback_power_on_nolock(struct kbase_device *kbdev)
 
     /* write 1 into 0x13fb_f130 bit 0 to enable timestamp register */
     /* timestamp will be used by clGetEventProfilingInfo*/
-    writel(0x00000001, g_MFG_base + 0x130);
-
+	writel(0x00000003, g_MFG_base + 0x130);
     /* set a flag to enable GPU DVFS */
     mtk_common_pm_mfg_active();
 
