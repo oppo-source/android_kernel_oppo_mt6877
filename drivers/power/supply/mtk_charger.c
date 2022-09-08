@@ -59,6 +59,8 @@
 
 #include "mtk_charger.h"
 
+static bool is_module_init_done;
+
 struct tag_bootmode {
 	u32 size;
 	u32 tag;
@@ -1557,7 +1559,6 @@ static int charger_routine_thread(void *arg)
 {
 	struct mtk_charger *info = arg;
 	unsigned long flags;
-	static bool is_module_init_done;
 	bool is_charger_on;
 
 	while (1) {
@@ -1956,7 +1957,8 @@ static void mtk_charger_external_power_changed(struct power_supply *psy)
 		psy->desc->name, prop.intval, prop2.intval,
 		get_vbus(info));
 
-	mtk_is_charger_on(info);
+	if(is_module_init_done)
+		mtk_is_charger_on(info);
 	_wake_up_charger(info);
 }
 
