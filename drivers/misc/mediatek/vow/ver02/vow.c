@@ -454,7 +454,7 @@ static void vow_service_Init(void)
 {
 	int I;
 	bool ret;
-	unsigned int vow_ipi_buf[3];
+	unsigned int vow_ipi_buf[4];
 
 	VOWDRV_DEBUG("%s():%x\n", __func__, init_flag);
 	/* common part */
