@@ -479,6 +479,7 @@ struct DISP_PQ_PARAM {
 #define DRM_MTK_HDMI_GET_CAPABILITY	0x3D
 
 #define DRM_MTK_DEBUG_LOG			0x3E
+#define DRM_MTK_GET_PANELS_INFO 0x5a
 
 enum MTKFB_DISPIF_TYPE {
 	DISPIF_TYPE_DBI = 0,
@@ -712,6 +713,15 @@ struct DRM_DISP_WRITE_REG {
 	unsigned int mask;
 };
 
+#define GET_PANELS_STR_LEN 64
+struct mtk_drm_panels_info {
+	int connector_cnt;
+	int default_connector_id;
+	unsigned int *connector_obj_id;
+	char **panel_name;
+	unsigned int *panel_id;
+};
+
 #define DRM_IOCTL_MTK_GEM_CREATE	DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_MTK_GEM_CREATE, struct drm_mtk_gem_create)
 
@@ -801,6 +811,9 @@ struct DRM_DISP_WRITE_REG {
 
 #define DRM_IOCTL_MTK_GET_LCM_INDEX    DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_MTK_GET_LCM_INDEX, unsigned int)
+
+#define DRM_IOCTL_MTK_GET_PANELS_INFO   DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_MTK_GET_PANELS_INFO, struct mtk_drm_panels_info)
 
 #define DRM_IOCTL_MTK_SUPPORT_COLOR_TRANSFORM     DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_MTK_SUPPORT_COLOR_TRANSFORM, struct DISP_COLOR_TRANSFORM)
