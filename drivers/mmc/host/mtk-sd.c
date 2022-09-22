@@ -3348,6 +3348,7 @@ static void msdc_restore_reg(struct msdc_host *host)
 	unsigned long tmo;
 
 	sdr_clr_bits(host->base + MSDC_CFG, MSDC_CFG_CKPDN);
+#if !defined(CONFIG_MACH_MT6781)
 	/*
 	 * As src_clk/HCLK use the same bit to gate/ungate,
 	 * So if want to only gate src_clk, need gate its parent(mux).
@@ -3356,6 +3357,7 @@ static void msdc_restore_reg(struct msdc_host *host)
 		clk_disable_unprepare(host->src_clk_cg);
 	else
 		clk_disable_unprepare(clk_get_parent(host->src_clk));
+#endif
 	/*
 	 * As modify MSDC_CFG may change the clk mode, so MUST do it
 	 * like msdc_set_mclk().
