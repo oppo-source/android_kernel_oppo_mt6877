@@ -1803,6 +1803,12 @@ PMR_GetLog2Contiguity(const PMR *psPMR)
 	return psPMR->uiLog2ContiguityGuarantee;
 }
 
+IMG_UINT32 PMRGetMaxChunkCount(PMR *psPMR)
+{
+	PVR_ASSERT(psPMR != NULL);
+	return (PMR_MAX_SUPPORTED_SIZE >> psPMR->uiLog2ContiguityGuarantee);
+}
+
 const IMG_CHAR *
 PMR_GetAnnotation(const PMR *psPMR)
 {
@@ -1875,7 +1881,8 @@ PMR_DevPhysAddr(const PMR *psPMR,
 		 * concerns.
 		 * We do not need this part in all systems because the GPU has the same
 		 * address view of system RAM as the CPU.
-		 * Alternatively this could be implemented as part of the PMR-factories directly */
+		 * Alternatively this could be implemented as part of the PMR-factories
+		 * directly */
 		if (PhysHeapGetType(psPMR->psPhysHeap) == PHYS_HEAP_TYPE_UMA ||
 		    PhysHeapGetType(psPMR->psPhysHeap) == PHYS_HEAP_TYPE_DMA)
 		{
