@@ -14,6 +14,7 @@
 #include <linux/sched/clock.h>
 #include <linux/timer.h>
 #include <linux/irq.h>
+#include <linux/iio/consumer.h>
 #include "reg_accdet.h"
 #if defined CONFIG_MTK_PMIC_NEW_ARCH
 #include <upmu_common.h>
@@ -111,6 +112,7 @@ static struct cdev *accdet_cdev;
 static struct class *accdet_class;
 static struct device *accdet_device;
 static int s_button_status;
+static struct iio_channel *accdet_auxadc_iio;
 
 /* accdet input device to report cable type and key event */
 static struct input_dev *accdet_input_dev;
@@ -880,22 +882,18 @@ static bool accdet_timeout_ns(u64 start_time_ns, u64 timeout_time_ns)
 
 static u32 accdet_get_auxadc(int deCount)
 {
-#if defined CONFIG_MTK_PMIC_NEW_ARCH | defined PMIC_ACCDET_CTP
-	int vol = pmic_get_auxadc_value(AUXADC_LIST_ACCDET);
+	int value = 0, ret = 0;
 
-	pr_info("%s() vol_val:%d offset:%d real vol:%d mv!\n", __func__, vol,
-		accdet_auxadc_offset,
-		(vol < accdet_auxadc_offset) ? 0 : (vol-accdet_auxadc_offset));
+	if (!PTR_ERR_OR_ZERO(accdet_auxadc_iio)) {
+		ret = iio_read_channel_processed(accdet_auxadc_iio,  &value);
+		pr_info("%s() value :%d\n", __func__, value);
+		if (ret < 0) {
+			pr_notice("Error: %s read fail (%d)\n", __func__, ret);
+			return ret;
+		}
+	}
 
-	if (vol < accdet_auxadc_offset)
-		vol = 0;
-	else
-		vol -= accdet_auxadc_offset;
-
-	return vol;
-#else
-	return 0;
-#endif
+	return value;
 }
 
 static void accdet_get_efuse(void)
@@ -3279,6 +3277,15 @@ int mt_accdet_probe(struct platform_device *dev)
 	struct platform_driver accdet_driver_hal = accdet_driver_func();
 
 	pr_info("%s() begin!\n", __func__);
+
+	/* get pmic accdet auxadc iio channel handler */
+	accdet_auxadc_iio = devm_iio_channel_get(&dev->dev, "pmic_accdet");
+	ret = PTR_ERR_OR_ZERO(accdet_auxadc_iio);
+	if (ret) {
+		if (ret != -EPROBE_DEFER)
+			pr_notice("%s(), Error: Get iio ch failed (%d)\n", __func__, ret);
+		return -EPROBE_DEFER;
+	}
 
 	/* register char device number, Create normal device for auido use */
 	ret = alloc_chrdev_region(&accdet_devno, 0, 1, ACCDET_DEVNAME);
