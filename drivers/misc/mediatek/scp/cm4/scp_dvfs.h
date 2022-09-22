@@ -20,7 +20,13 @@
 #define DVFS_STATUS_CMD_DISABLE	(-8)
 
 #define CLK_26M					(26)
+
+#if defined(CONFIG_MACH_MT6785)
+#define MAINPLL_273M			(218)
+#else
 #define MAINPLL_273M			(273)
+#endif
+
 #define UNIVPLL_416M			(416)
 
 enum scp_state_enum {
@@ -39,7 +45,7 @@ enum {
 	CLK_HIGH_IRQ_EN_BIT = 17,
 };
 
-#if (defined(CONFIG_MACH_MT6781) || defined(CONFIG_MACH_MT6785))
+#if defined(CONFIG_MACH_MT6781)
 #include <linux/arm-smccc.h>
 enum scp_req_r {
 	SCP_REQ_RELEASE = 0,
