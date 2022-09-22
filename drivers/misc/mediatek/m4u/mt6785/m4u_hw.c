@@ -1395,7 +1395,15 @@ static int _m4u_config_port(int port, int virt, int sec, int dis, int dir)
 		m4uHw_set_field_by_mask(larb_base,
 			SMI_LARB_NON_SEC_CONx(larb_port),
 			F_SMI_MMU_EN, !!(virt));
-
+#ifdef M4U_GZ_SERVICE_ENABLE
+		if (virt == 1 && sec == 0)
+			m4uHw_set_field_by_mask(
+					larb_base,
+					SMI_LARB_NON_SEC_CONx(
+					larb_port),
+					F_SMI_BIT32,
+					0);
+#endif
 		/* debug use */
 		mmu_en = m4uHw_get_field_by_mask(larb_base,
 			SMI_LARB_NON_SEC_CONx(larb_port), 0x1);

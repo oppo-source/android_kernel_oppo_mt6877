@@ -376,7 +376,7 @@ struct M4U_MOUDLE_STRUCT {
 #define MTK_M4U_T_DMA_OP	      _IOW(MTK_M4U_MAGICNO, 29, int)
 
 #define MTK_M4U_T_SEC_INIT                  _IOW(MTK_M4U_MAGICNO, 50, int)
-#define MTK_M4U_T_GZ_SEC_INIT               _IOW(MTK_M4U_MAGICNO, 60, int)
+#define MTK_M4U_GZ_SEC_INIT	    _IOW(MTK_M4U_MAGICNO, 60, int)
 
 
 #if defined(CONFIG_MACH_MT6779) || defined(CONFIG_MACH_MT6785)
