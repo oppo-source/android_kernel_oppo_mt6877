@@ -671,8 +671,8 @@ page_owner=on loop.max_part=7";
 		dvfsrc-opp-num = <6>;
 		dvfs-opp =
 			/*vcore		vsram	uv	rc  spm		freq	mux*/
-			< 575000	800000	0xff	0x0 0x0		110	0>,
-			< 600000	800000	0xff	0x0 0x0		130	0>,
+			< 575000	800000	0xff	0x0 0x0		110	1>,
+			< 600000	800000	0xff	0x0 0x0		130	1>,
 			< 650000	850000	0xff	0x0 0x1		165	2>,
 			< 650000	850000	0xff	0x0 0x1		218	5>,
 			< 700000	850000	0xff	0x1 0x12	330	2>,
