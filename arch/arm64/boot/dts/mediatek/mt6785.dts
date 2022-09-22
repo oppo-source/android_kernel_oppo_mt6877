@@ -4733,6 +4733,8 @@ page_owner=on loop.max_part=7";
 
 	accdet: accdet {
 		compatible = "mediatek,pmic-accdet";
+		io-channels = <&pmic_auxadc AUXADC_ACCDET>;
+		io-channel-names = "pmic_accdet";
 		/* ACCDET GPIO standardization for AP EINT */
 		/*
 		 *pinctrl-names = "default", "state_eint_as_int";
