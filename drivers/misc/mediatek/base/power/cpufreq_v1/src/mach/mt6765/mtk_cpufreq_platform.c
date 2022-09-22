@@ -609,7 +609,7 @@ unsigned int _mt_cpufreq_get_cpu_level(void)
 	val_ly = (efuse_ly >> 1) & 0x1;
 	kfree(efuse_ly_buf);
 
-/* Volt Yield change for 65X */
+/* Volt Yield change for 65OD */
 	nvmem_dev = nvmem_device_get(&pdev->dev, "mtk_efuse");
 
 	if (IS_ERR(nvmem_dev)) {
@@ -621,7 +621,7 @@ unsigned int _mt_cpufreq_get_cpu_level(void)
 	nvmem_device_read(nvmem_dev, EX_DEV_OFF_FAB2, sizeof(__u32), &tmp);
 	fabinfo2 = (tmp >> 3) & 0x1;
 	nvmem_device_put(nvmem_dev);
-/* Volt Yield Chaneg End */
+/* Volt Yield change End */
 
 	if ((val == 0x2) || (val == 0x5))
 		lv = CPU_LEVEL_2;
@@ -647,9 +647,8 @@ unsigned int _mt_cpufreq_get_cpu_level(void)
 			lv = CPU_LEVEL_5;
 	}
 
-	/* for improve yield MT676OD */
-	if ((val == 0x2) || (val == 0x3) || (val == 0x4)
-		|| (val == 0x5) || (val == 0x12) || (val == 0x14) || (val == 0x24)) {
+	/* for improve yield MT6765OD */
+	if ((val == 0x3) || (val == 0x4) || (val == 0x12)) {
 		if (fabinfo2 == 1) {
 			lv = CPU_LEVEL_9;
 			tag_pr_info("%s CPU DVFS fabinfo2 is true for 65OD, lv=%d\n",
