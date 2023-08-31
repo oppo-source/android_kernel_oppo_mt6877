@@ -359,7 +359,8 @@ static inline void on_pe_timer_timeout(
 		struct tcpc_device *tcpc, uint32_t timer_id)
 {
 	struct pd_event pd_event = {0};
-
+	int rv = 0;
+	uint32_t chip_vid = 0;
 	pd_event.event_type = PD_EVT_TIMER_MSG;
 	pd_event.msg = timer_id;
 	pd_event.pd_msg = NULL;
@@ -414,6 +415,13 @@ static inline void on_pe_timer_timeout(
 	case PD_TIMER_PE_IDLE_TOUT:
 		TCPC_INFO("pe_idle tout\n");
 		pd_put_pe_event(&tcpc->pd_port, PD_PE_IDLE);
+		break;
+
+	case PD_TIMER_HARD_RESET_COMPLETE:
+		rv = tcpci_get_chip_vid(tcpc, &chip_vid);
+		if (!rv &&  SOUTHCHIP_PD_VID == chip_vid) {
+			pd_put_sent_hard_reset_event(tcpc);
+		}
 		break;
 
 	default:
@@ -1362,7 +1370,7 @@ int tcpci_timer_init(struct tcpc_device *tcpc)
 		tcpc->tcpc_timer[i].function = tcpc_timer_call[i];
 	}
 	tcpc->wakeup_wake_lock =
-		wakeup_source_register(&tcpc->dev, "tcpc_wakeup_wake_lock");
+		wakeup_source_register(NULL, "tcpc_wakeup_wake_lock");
 	INIT_DELAYED_WORK(&tcpc->wake_up_work, wake_up_work_func);
 	alarm_init(&tcpc->wake_up_timer, ALARM_REALTIME, tcpc_timer_wakeup);
 

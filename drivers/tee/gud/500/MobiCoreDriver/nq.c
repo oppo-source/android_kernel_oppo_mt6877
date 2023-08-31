@@ -51,6 +51,7 @@
 #define NQ_TEE_WORKER_THREADS	4
 #endif
 
+#define MC_BIG_CORE 0x6
 static struct {
 	struct mutex buffer_mutex;	/* Lock on SWd communication buffer */
 	struct mcp_buffer *mcp_buffer;
@@ -290,14 +291,24 @@ cpumask_t tee_set_affinity(void)
 {
 	cpumask_t old_affinity;
 	unsigned long affinity = get_tee_affinity();
+	int iRet = 0;
 
 	old_affinity = current->cpus_allowed;
-	mc_dev_devel("aff = %lx mask = %lx curr_aff = %*pbl (pid = %u)",
+	// mc_dev_devel("aff = %lx mask = %lx curr_aff = %*pbl (pid = %u)",
+	mc_dev_info("BindCPUCore: aff = %lx mask = %lx curr_aff = %*pbl (pid = %u)",
 		     affinity,
 		     l_ctx.default_affinity_mask,
 		     cpumask_pr_args(&old_affinity),
 		     current->pid);
-	set_cpus_allowed_ptr(current, to_cpumask(&affinity));
+	if (current->flags & PF_NO_SETAFFINITY) {
+		mc_dev_devel("Skip set_cpus_allowed_ptr as PF_NO_SETAFFINITY masked (pid = %u)", current->pid);
+	} else {
+		// set_cpus_allowed_ptr(current, to_cpumask(&affinity));
+		iRet = set_cpus_allowed_ptr(current, to_cpumask(&affinity));
+		if (0 != iRet) {
+			mc_dev_info("BindCPUCore: set_cpus_allowed_ptr() : %d ", iRet);
+		}
+	}
 
 	return old_affinity;
 }
@@ -312,7 +323,11 @@ void tee_restore_affinity(cpumask_t old_affinity)
 		     l_ctx.default_affinity_mask,
 		     cpumask_pr_args(&current_affinity),
 		     current->pid);
-	set_cpus_allowed_ptr(current, &old_affinity);
+	if (current->flags & PF_NO_SETAFFINITY) {
+		mc_dev_devel("Skip set_cpus_allowed_ptr as PF_NO_SETAFFINITY masked (pid = %u)", current->pid);
+	} else {
+		set_cpus_allowed_ptr(current, &old_affinity);
+	}
 }
 
 void nq_session_init(struct nq_session *session, bool is_gp)
@@ -931,22 +946,43 @@ static s32 tee_schedule(uintptr_t arg, unsigned int *timeout_ms)
 		/* Probe TEE activity */
 		run         = get_workers();
 		req_workers = get_required_workers();
+		/* The logic behind this strategy is to use as much as
+		 * possible the same worker thread. It is supposed to
+		 * improve non-SMP use cases by giving TEE more
+		 * "weight" (using one and the same thread) from
+		 * Linux scheduler point of view.
+		 */
+		{
+			s32 worker = NQ_TEE_WORKER_THREADS - 1;
 
-		/* If SWd has more threads to run, then add a worker */
-		if (run < req_workers && run < NQ_TEE_WORKER_THREADS) {
-			mc_dev_devel("[%d] R1 run=%d sc=%d", id, run,
-				     req_workers);
-			wake_up(&l_ctx.workers_wq);
-		}
-
-		/* If SWd has less threads to run, then current worker */
-		/* likely goes sleeping.                               */
-		if (run > req_workers) {
-			mc_dev_devel("[%d] R2 run=%d sc=%d", id, run,
-				     req_workers);
-			atomic_dec(&l_ctx.workers_run);
-			ret = 0;
-			goto exit;
+			do {
+				mc_dev_devel("run=%d req=%d worker=%d", run,
+					     req_workers, worker);
+				/* If SWd has less threads to run, then */
+				/* current worker likely goes sleeping. */
+				if (run > req_workers) {
+					mc_dev_devel("exit tee_worker");
+					atomic_dec(&l_ctx.workers_run);
+					ret = 0;
+					goto exit;
+				}
+				/* If SWd has enough threads to run, */
+				/* nothing more to do */
+				if (run == req_workers)
+					break;
+				/* If SWd ask too much threads to run, */
+				/* nothing more to do */
+				if (run == NQ_TEE_WORKER_THREADS)
+					break;
+				mc_dev_devel("wakeup worker %d", worker);
+				/* If SWd has more threads to run, */
+				/* then add a worker */
+				if (wake_up_process(
+				    l_ctx.tee_worker[worker])) {
+					run++;
+				}
+				worker--;
+			} while (worker >= 0);
 		}
 	}
 
@@ -1140,7 +1176,10 @@ int nq_start(void)
 		l_ctx.tee_worker[cnt] = kthread_create(tee_worker,
 						       (void *)((uintptr_t)cnt),
 						       worker_name);
-
+		#if defined(TEE_WORKER_BIG_CORE)
+			kthread_bind(l_ctx.tee_worker[cnt], MC_BIG_CORE);
+			mc_dev_info("BindCPUCore: Should NOT be here: TEE_WORKER_BIG_CORE ");
+		#endif
 		if (IS_ERR(l_ctx.tee_worker[cnt])) {
 			ret = PTR_ERR(l_ctx.tee_worker[cnt]);
 			mc_dev_err(ret, "tee_worker thread creation failed");
@@ -1318,8 +1357,10 @@ int nq_init(void)
 	atomic_set(&l_ctx.big_core_demand_cnt, 0);
 #endif
 
-	mc_dev_devel("Default affinity : %lx", l_ctx.default_affinity_mask);
+	// mc_dev_devel("Default affinity : %lx", l_ctx.default_affinity_mask);
+	mc_dev_info("BindCPUCore: Default affinity : %lx", l_ctx.default_affinity_mask);
 	atomic_set(&l_ctx.tee_affinity, l_ctx.default_affinity_mask);
+	mc_dev_info("BindCPUCore: l_ctx.tee_affinity : %lx", l_ctx.tee_affinity);
 	/* Create tee affinity debugfs entry */
 	debugfs_create_file("tee_affinity_mask", 0600, g_ctx.debug_dir, NULL,
 			    &mc_debug_tee_affinity_ops);
@@ -1341,4 +1382,20 @@ void nq_exit(void)
 	free_pages((unsigned long)l_ctx.mci, l_ctx.order);
 	logging_exit(l_ctx.log_buffer_busy);
 	mc_clock_exit();
+}
+
+void boost_tee(void)
+{
+    int cnt;
+    for (cnt = 0; cnt < NQ_TEE_WORKER_THREADS; cnt++) {
+        set_user_nice(l_ctx.tee_worker[cnt], MIN_NICE);
+    }
+}
+
+void deboost_tee(void)
+{
+    int cnt;
+    for (cnt = 0; cnt < NQ_TEE_WORKER_THREADS; cnt++) {
+        set_user_nice(l_ctx.tee_worker[cnt], 0);
+    }
 }
