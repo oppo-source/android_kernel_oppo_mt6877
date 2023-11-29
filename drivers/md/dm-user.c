@@ -358,8 +358,10 @@ static inline long bio_flags_to_user_flags(struct bio *bio)
 	}
 
 	if (unlikely(opf)) {
-		pr_warn("unsupported BIO type %x\n", opf);
-		return -EOPNOTSUPP;
+                if (opf & ~REQ_FG) {
+		    pr_warn("unsupported BIO type %x\n", opf);
+		    return -EOPNOTSUPP;
+                }
 	}
 	WARN_ON(out < 0);
 	return out;

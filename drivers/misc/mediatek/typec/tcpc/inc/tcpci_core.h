@@ -82,6 +82,18 @@ struct tcpc_desc {
 	uint8_t vconn_supply;
 	int notifier_supply_num;
 	char *name;
+#ifdef CONFIG_WATER_DETECTION
+	u32 wd_sbu_calib_init;
+	u32 wd_sbu_pl_bound;
+	u32 wd_sbu_pl_lbound_c2c;
+	u32 wd_sbu_pl_ubound_c2c;
+	u32 wd_sbu_ph_auddev;
+	u32 wd_sbu_ph_lbound;
+	u32 wd_sbu_ph_lbound1_c2c;
+	u32 wd_sbu_ph_ubound1_c2c;
+	u32 wd_sbu_ph_ubound2_c2c;
+	u32 wd_sbu_aud_ubound;
+#endif /* CONFIG_WATER_DETECTION */
 };
 
 /*---------------------------------------------------------------------------*/
@@ -200,8 +212,11 @@ struct tcpc_ops {
 	int (*init_alert_mask)(struct tcpc_device *tcpc);
 	int (*alert_status_clear)(struct tcpc_device *tcpc, uint32_t mask);
 	int (*fault_status_clear)(struct tcpc_device *tcpc, uint8_t status);
+	int (*get_chip_id)(struct tcpc_device *tcpc, uint32_t *chip_id);
 	int (*set_alert_mask)(struct tcpc_device *tcpc, uint32_t mask);
 	int (*get_alert_mask)(struct tcpc_device *tcpc, uint32_t *mask);
+	int (*get_chip_pid)(struct tcpc_device *tcpc,uint32_t *chip_pid);
+	int (*get_chip_vid)(struct tcpc_device *tcpc,uint32_t *chip_vid);
 	int (*get_alert_status)(struct tcpc_device *tcpc, uint32_t *alert);
 	int (*get_power_status)(struct tcpc_device *tcpc, uint16_t *pwr_status);
 	int (*get_fault_status)(struct tcpc_device *tcpc, uint8_t *status);
@@ -481,11 +496,15 @@ struct tcpc_device {
 
 	/* TypeC Shield Protection */
 #ifdef CONFIG_WATER_DETECTION
+#ifdef OPLUS_FEATURE_CHG_BASIC
+        bool wd_already;
+#endif
 	int usbid_calib;
 	int bootmode;
 #endif /* CONFIG_WATER_DETECTION */
 #ifdef CONFIG_CABLE_TYPE_DETECTION
 	enum tcpc_cable_type typec_cable_type;
+	enum tcpc_cable_type pre_typec_cable_type;
 #endif /* CONFIG_CABLE_TYPE_DETECTION */
 };
 
