@@ -304,6 +304,7 @@ static void __cqhci_enable(struct cqhci_host *cq_host)
 	cqhci_writel(cq_host, upper_32_bits(cq_host->desc_dma_base),
 		     CQHCI_TDLBAU);
 
+	cqhci_writel(cq_host, 0x40, CQHCI_SSC1);
 	cqhci_writel(cq_host, cq_host->rca, CQHCI_SSC2);
 
 	cqhci_set_irqs(cq_host, 0);
@@ -311,6 +312,9 @@ static void __cqhci_enable(struct cqhci_host *cq_host)
 	cqcfg |= CQHCI_ENABLE;
 
 	cqhci_writel(cq_host, cqcfg, CQHCI_CFG);
+
+	if (cqhci_readl(cq_host, CQHCI_CTL) & CQHCI_HALT)
+		cqhci_writel(cq_host, 0, CQHCI_CTL);
 
 	mmc->cqe_on = true;
 
@@ -995,9 +999,9 @@ static void cqhci_recovery_start(struct mmc_host *mmc)
 	cqhci_halt(mmc, CQHCI_START_HALT_TIMEOUT);
 
 	if (cq_host->ops->disable)
-		cq_host->ops->disable(mmc, true);
-
+		cq_host->ops->disable(mmc, true);//msdc_cqe_disable
 	mmc->cqe_on = false;
+
 }
 
 static int cqhci_error_from_flags(unsigned int flags)
@@ -1063,6 +1067,7 @@ static void cqhci_recovery_finish(struct mmc_host *mmc)
 	unsigned long flags;
 	u32 cqcfg;
 	bool ok;
+	u32 reg;
 
 	pr_debug("%s: cqhci: %s\n", mmc_hostname(mmc), __func__);
 
@@ -1096,7 +1101,17 @@ static void cqhci_recovery_finish(struct mmc_host *mmc)
 	cqhci_recover_mrqs(cq_host);
 
 	WARN_ON(cq_host->qcnt);
-
+#if 1
+	/* guilin++
+	 * MTK PATCH: need disable cqhci for legacy cmds coz legacy cmds using
+	 * GPD DMA and it can only work when CQHCI disable.
+	 */
+	if (cq_host->quirks & CQHCI_QUIRK_DIS_BEFORE_NON_CQ_CMD) {
+		reg = cqhci_readl(cq_host, CQHCI_CFG);
+		reg &= ~CQHCI_ENABLE;
+		cqhci_writel(cq_host, reg, CQHCI_CFG);
+	}
+#endif
 	spin_lock_irqsave(&cq_host->lock, flags);
 	cq_host->qcnt = 0;
 	cq_host->recovery_halt = false;

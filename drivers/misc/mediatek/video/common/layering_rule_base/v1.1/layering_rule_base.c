@@ -31,7 +31,9 @@ static struct layering_rule_ops *l_rule_ops;
 static int ext_id_tuning(struct disp_layer_info *disp_info, int disp_idx);
 static unsigned int adaptive_dc_request;
 static unsigned int roll_gpu_for_idle;
-
+#ifdef CONFIG_MACH_MT6768
+extern bool oplus_display_no_support_mtk_round_corner;
+#endif
 static struct {
 	enum LYE_HELPER_OPT opt;
 	unsigned int val;
@@ -118,6 +120,14 @@ bool is_yuv(enum DISP_FORMAT format)
 	}
 }
 
+bool is_layer_id_valid(struct disp_layer_info *disp_info,
+	int disp_idx, int i)
+{
+	if (i < 0 || i >= disp_info->layer_num[disp_idx])
+		return false;
+	else
+		return true;
+}
 
 bool is_gles_layer(struct disp_layer_info *disp_info,
 		   int disp_idx, int layer_idx)
@@ -513,6 +523,26 @@ static void print_disp_info_to_log_buffer(struct disp_layer_info *disp_info)
 	n += scnprintf(status_buf + n, LOGGER_BUFFER_SIZE - n,
 		"Last hrt query data[end]\n");
 
+}
+
+void rollback_layer_to_GPU(struct disp_layer_info *disp_info, int disp_idx,
+	int i)
+{
+	if (disp_idx < 0) {
+		DISPMSG("%s: error disp_idx:%d\n",
+			__func__, disp_idx);
+		return;
+	}
+	if (is_layer_id_valid(disp_info, disp_idx, i) == false)
+		return;
+
+	if (disp_info->gles_head[disp_idx] == -1 ||
+	    disp_info->gles_head[disp_idx] > i)
+		disp_info->gles_head[disp_idx] = i;
+	if (disp_info->gles_tail[disp_idx] == -1 ||
+		disp_info->gles_tail[disp_idx] < i)
+		disp_info->gles_tail[disp_idx] = i;
+	disp_info->input_config[disp_idx][i].ext_sel_layer = -1;
 }
 
 int rollback_resize_layer_to_GPU_range(struct disp_layer_info *disp_info,
@@ -1236,7 +1266,10 @@ static int _calc_hrt_num(struct disp_layer_info *disp_info, int disp,
 		sum_overlap_w += HRT_AEE_WEIGHT;
 
 #ifdef CONFIG_MTK_ROUND_CORNER_SUPPORT
-	sum_overlap_w += HRT_ROUND_CORNER_WEIGHT;
+#ifdef CONFIG_MACH_MT6768
+	if(!oplus_display_no_support_mtk_round_corner)
+#endif
+		sum_overlap_w += HRT_ROUND_CORNER_WEIGHT;
 #endif
 
 /**
@@ -1254,6 +1287,9 @@ static int _calc_hrt_num(struct disp_layer_info *disp_info, int disp,
 		if (has_dal_layer)
 			sum_overlap_w += HRT_AEE_WEIGHT;
 #ifdef CONFIG_MTK_ROUND_CORNER_SUPPORT
+#ifdef CONFIG_MACH_MT6768
+	if(!oplus_display_no_support_mtk_round_corner)
+#endif
 		sum_overlap_w += HRT_ROUND_CORNER_WEIGHT;
 #endif
 	}
@@ -2034,7 +2070,8 @@ static int load_hrt_test_data(struct disp_layer_info *disp_info)
 			DISPWARN("Test case %d is %s\n",
 				(int)test_case, is_test_pass?"Pass":"Fail");
 		} else if (strncmp(line_buf, "[layer_result]", 14) == 0) {
-			long layer_result = 0, layer_id;
+			long layer_result = 0;
+			long layer_id = 0;
 
 			tok = strchr(line_buf, ']');
 			if (!tok)

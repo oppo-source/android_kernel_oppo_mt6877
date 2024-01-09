@@ -273,7 +273,7 @@ static ssize_t perfmgr_perfserv_freq_proc_write(struct file *filp
 		goto out;
 
 	tmp = buf;
-	pr_debug("freq write_to_file\n");
+	//pr_debug("freq write_to_file\n");
 	while ((tok = strsep(&tmp, " ")) != NULL) {
 		if (i == arg_num) {
 			pr_debug(
@@ -337,6 +337,9 @@ static ssize_t perfmgr_boot_freq_proc_write(struct file *filp,
 			sizeof(struct cpu_ctrl_data), GFP_KERNEL);
 	if (!freq_limit)
 		goto out;
+
+	for_each_perfmgr_clusters(cid)
+		freq_limit[cid].min = freq_limit[cid].max = -1;
 
 	tmp = buf;
 	while ((tok = strsep(&tmp, " ")) != NULL) {
@@ -565,7 +568,7 @@ static ssize_t perfmgr_perfserv_core_proc_write(struct file *filp
 	}
 
 	tmp = buf;
-	pr_debug("freq write_to_file\n");
+	//pr_debug("freq write_to_file\n");
 	while ((tok = strsep(&tmp, " ")) != NULL) {
 		if (i == arg_num) {
 			pr_debug(

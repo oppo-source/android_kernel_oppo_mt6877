@@ -1798,7 +1798,11 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 				}
 			} else {
 				if (gadget->lpm_capable)
+#ifdef OPLUS_FEATURE_CHG_BASIC
+					cdev->desc.bcdUSB = cpu_to_le16(0x0200);
+#else
 					cdev->desc.bcdUSB = cpu_to_le16(0x0201);
+#endif
 				else
 					cdev->desc.bcdUSB = cpu_to_le16(0x0200);
 			}
@@ -2061,6 +2065,9 @@ unknown:
 				if (w_index != 0x5 || (w_value >> 8))
 					break;
 				interface = w_value & 0xFF;
+				if (interface >= MAX_CONFIG_INTERFACES ||
+					!os_desc_cfg->interface[interface])
+						break;
 				buf[6] = w_index;
 				count = count_ext_prop(os_desc_cfg,
 					interface);
