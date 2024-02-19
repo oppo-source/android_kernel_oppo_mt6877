@@ -155,6 +155,9 @@ struct head_dts_data {
 	unsigned int moisture_comp_vth;
 	unsigned int moisture_comp_vref2;
 	unsigned int moisture_use_ext_res;
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+	int hs_det_discrete;
+#endif
 };
 
 enum {

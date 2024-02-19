@@ -1,0 +1,122 @@
+/*
+ * Copyright (C) 2016 MediaTek Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ */
+
+unsigned short imx890_23689_seamless_preview[] = {
+    //QBIN_Vbin_30FPS
+    //H: 4096
+    //V: 3072
+    //Line Length PCK Setting
+    0x0342, 0x3D,
+    0x0343, 0x00,
+    //Frame Length Lines Setting
+    0x0340, 0x0C,
+    0x0341, 0x90,
+    //ROI Setting
+    0x0346, 0x00,
+    0x034A, 0x17,
+    //Mode Setting
+    0x0900, 0x01,
+    0x0901, 0x22,
+    0x0902, 0x08,
+    0x3005, 0x02,
+    0x3120, 0x04,
+    0x3121, 0x01,
+    0x3200, 0x41,
+    0x3201, 0x41,
+    0x32D6, 0x00,
+    //Digital Crop & Scaling
+    0x0408, 0x00,
+    //Output Size Setting
+    //Clock Setting
+    //Other Setting
+    0x319C, 0x01,
+    0x3800, 0x01,
+    0x3801, 0x01,
+    0x3802, 0x02,
+    0x3847, 0x03,
+    0x38C4, 0x01,
+    0x38C5, 0x2C,
+    //Integration Setting
+    0x0202, 0x0C,
+    0x0203, 0x60,
+    0x3803, 0x00,
+    0x3804, 0x17,
+    0x3805, 0xC0,
+    //Gain Setting
+    //EPD Setting
+    //PHASE PIX Setting
+    0x30B4, 0x01,
+    //PHASE PIX data type Setting
+    0x3066, 0x03,
+    0x3067, 0x2B,
+    0x3068, 0x06,
+    0x3069, 0x2B,
+    //DOL Setting
+    //N+1 frame start
+    0x305C,0x01,
+};
+
+
+unsigned short imx890_23689_seamless_custom5[] = {
+    //H: 4096
+    //V: 3072
+    //Line Length PCK Setting
+    0x0342, 0x2D,
+    0x0343, 0x20,
+    //Frame Length Lines Setting
+    0x0340, 0x10,
+    0x0341, 0xFC,
+    //ROI Setting
+    0x0346, 0x06,
+    0x034A, 0x11,
+    //Mode Setting
+    0x0900, 0x00,
+    0x0901, 0x11,
+    0x0902, 0x0A,
+    0x3005, 0x00,
+    0x3120, 0x00,
+    0x3121, 0x01,
+    0x3200, 0x00,
+    0x3201, 0x00,
+    0x32D6, 0x01,
+    //Digital Crop & Scaling
+    0x0408, 0x08,
+    //Output Size Setting
+    //Clock Setting
+    //Other Setting
+    0x319C, 0x00,
+    0x3800, 0x00,
+    0x3801, 0x00,
+    0x3802, 0x04,
+    0x3847, 0x00,
+    0x38C4, 0x02,
+    0x38C5, 0x26,
+    //Integration Setting
+    0x0202, 0x10,
+    0x0203, 0xCC,
+    0x3803, 0x01,
+    0x3804, 0x16,
+    0x3805, 0xB0,
+    //Gain Setting
+    //EPD Setting
+    //PHASE PIX Setting
+    0x30B4, 0x00,
+    //PHASE PIX data type Setting
+    0x3066, 0x00,
+    0x3067, 0x30,
+    0x3068, 0x00,
+    0x3069, 0x30,
+    //DOL Setting
+    //N+1 frame start
+    0x305C, 0x00,
+};

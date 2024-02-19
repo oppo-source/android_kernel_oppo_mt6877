@@ -476,10 +476,17 @@ static int tcpc_device_irq_enable(struct tcpc_device *tcpc)
 		pr_err("%s : tcpc typec init fail\n", __func__);
 		return ret;
 	}
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/**
+  *mtk patch from ALPS08570528
+  *after the phone restarts, some adapters cannot recognize PD.
+  */
+	schedule_delayed_work(
+		&tcpc->event_init_work, msecs_to_jiffies(0));
+#else
 	schedule_delayed_work(
 		&tcpc->event_init_work, msecs_to_jiffies(10*1000));
-
+#endif /*OPLUS_FEATURE_CHG_BASIC*/
 	pr_info("%s : tcpc irq enable OK!\n", __func__);
 	return 0;
 }
@@ -557,8 +564,15 @@ static void tcpc_event_init_work(struct work_struct *work)
 #else
 	tcpc->chg_psy = devm_power_supply_get_by_phandle(
 		tcpc->dev.parent, "charger");
-#endif
-	if (!tcpc->chg_psy) {
+#endif /* ADAPT_CHARGER_V1 */
+
+#ifdef CONFIG_CHARGER_BQ2560X
+	if (IS_ERR_OR_NULL(tcpc->chg_psy)) {
+		tcpc->chg_psy = power_supply_get_by_name("bq2560x");
+		TCPC_ERR("%s get charger psy\n", __func__);
+	}
+#endif /* CONFIG_CHARGER_BQ2560X */
+	if (IS_ERR_OR_NULL(tcpc->chg_psy)) {
 		tcpci_unlock_typec(tcpc);
 		TCPC_ERR("%s get charger psy fail\n", __func__);
 		return;
