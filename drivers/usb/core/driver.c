@@ -1513,6 +1513,15 @@ int usb_resume(struct device *dev, pm_message_t msg)
 	 * (This can't be done in usb_resume_interface()
 	 * above because it doesn't own the right set of locks.)
 	 */
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	struct usb_device *udev_p = udev->parent;
+	if (udev_p) {
+		if (udev_p->state == USB_STATE_SUSPENDED && udev_p->can_submit == 0) {
+			dev_err(&udev->dev, "skip usb_resume\n");
+			return 0;
+		}
+	}
+#endif
 	status = usb_resume_both(udev, msg);
 	if (status == 0) {
 		pm_runtime_disable(dev);

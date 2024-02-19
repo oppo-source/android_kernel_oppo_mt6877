@@ -285,6 +285,11 @@ static int adsp_user_event_notify(struct notifier_block *nb,
 	case ADSP_EVENT_READY:
 		ret = kobject_uevent(&dev->kobj, KOBJ_ONLINE);
 		break;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+	case ADSP_EVENT_MONITOR:
+		ret = kobject_uevent(&dev->kobj, KOBJ_CHANGE);
+		break;
+#endif
 	default:
 		pr_info("%s, ignore event %lu", __func__, event);
 		break;
