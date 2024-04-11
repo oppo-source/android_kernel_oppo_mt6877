@@ -15,6 +15,7 @@
 #include <sound/pcm_params.h>
 #include "mtk-afe-fe-dai.h"
 #include "mtk-base-afe.h"
+#include <linux/delay.h>
 
 #if defined(CONFIG_MTK_VOW_BARGE_IN_SUPPORT)
 #include "../scp_vow/mtk-scp-vow-common.h"
@@ -650,6 +651,7 @@ int mtk_dsp_memif_set_enable(struct mtk_base_afe *afe, int id)
 	int ret = 0;
 #if defined(CONFIG_MTK_AUDIODSP_SUPPORT) && defined(CONFIG_SND_SOC_MTK_AUDIO_DSP)
 	int adsp_sem_ret = ADSP_ERROR;
+	pr_info("%s start", __func__);
 
 #ifdef AUDIO_DSP_V1
 	if (adsp_feature_is_active())
@@ -661,9 +663,19 @@ int mtk_dsp_memif_set_enable(struct mtk_base_afe *afe, int id)
 	if (adsp_sem_ret == ADSP_OK) {
 		ret = mtk_memif_set_enable(afe, id);
 		release_adsp_semaphore(SEMA_AUDIOREG);
-	} else if (adsp_sem_ret == ADSP_SEMAPHORE_BUSY)
+	} else if (adsp_sem_ret == ADSP_SEMAPHORE_BUSY) {
 		pr_info("%s adsp_sem_ret[%d]\n", __func__, adsp_sem_ret);
-	else
+		udelay(500);
+		adsp_sem_ret = get_adsp_semaphore(SEMA_AUDIOREG);
+
+		if (adsp_sem_ret == ADSP_OK) {
+			ret = mtk_memif_set_enable(afe, id);
+			release_adsp_semaphore(SEMA_AUDIOREG);
+		} else if (adsp_sem_ret == ADSP_SEMAPHORE_BUSY)
+			pr_info("%s retry adsp_sem_ret[%d]\n", __func__, adsp_sem_ret);
+		else
+			ret = mtk_memif_set_enable(afe, id);
+	} else
 #endif
 		ret = mtk_memif_set_enable(afe, id);
 
@@ -704,6 +716,7 @@ int mtk_dsp_irq_set_enable(struct mtk_base_afe *afe,
 #if defined(CONFIG_MTK_AUDIODSP_SUPPORT) && defined(CONFIG_SND_SOC_MTK_AUDIO_DSP)
 	int adsp_sem_ret = ADSP_ERROR;
 #endif
+	pr_info("%s start", __func__);
 
 	if (!afe)
 		return -EPERM;
@@ -722,9 +735,24 @@ int mtk_dsp_irq_set_enable(struct mtk_base_afe *afe,
 				   1 << irq_data->irq_en_shift,
 				   1 << irq_data->irq_en_shift);
 		release_adsp_semaphore(SEMA_AUDIOREG);
-	} else if (adsp_sem_ret == ADSP_SEMAPHORE_BUSY)
+	} else if (adsp_sem_ret == ADSP_SEMAPHORE_BUSY) {
 		pr_info("%s adsp_sem_ret[%d]\n", __func__, adsp_sem_ret);
-	else
+
+		udelay(500);
+		adsp_sem_ret = get_adsp_semaphore(SEMA_AUDIOREG);
+		/* get sem ok*/
+		if (adsp_sem_ret == ADSP_OK) {
+			regmap_update_bits(afe->regmap, irq_data->irq_en_reg,
+					   1 << irq_data->irq_en_shift,
+					   1 << irq_data->irq_en_shift);
+			release_adsp_semaphore(SEMA_AUDIOREG);
+		} else if (adsp_sem_ret == ADSP_SEMAPHORE_BUSY)
+			pr_info("%s retry adsp_sem_ret[%d]\n", __func__, adsp_sem_ret);
+		else
+			regmap_update_bits(afe->regmap, irq_data->irq_en_reg,
+					   1 << irq_data->irq_en_shift,
+					   1 << irq_data->irq_en_shift);
+	} else
 #endif
 		regmap_update_bits(afe->regmap, irq_data->irq_en_reg,
 				   1 << irq_data->irq_en_shift,
@@ -782,6 +810,18 @@ int mtk_memif_set_addr(struct mtk_base_afe *afe, int id,
 	int msb_at_bit33 = upper_32_bits(dma_addr) ? 1 : 0;
 	unsigned int phys_buf_addr = lower_32_bits(dma_addr);
 	unsigned int phys_buf_addr_upper_32 = upper_32_bits(dma_addr);
+
+    //#ifdef OPLUS_ARCH_EXTENDS
+	unsigned int value = 0;
+
+	/* check the memif already disable */
+	regmap_read(afe->regmap, memif->data->enable_reg, &value);
+	if (value & 0x1 << memif->data->enable_shift) {
+		mtk_memif_set_disable(afe, id);
+		pr_info("%s memif[%d] is enabled before set_addr, en:0x%x\n",
+			__func__, id, value);
+	}
+    //#endif
 
 	memif->dma_area = dma_area;
 	memif->dma_addr = dma_addr;

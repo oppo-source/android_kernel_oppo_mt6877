@@ -67,6 +67,9 @@ struct adsp_mpu_info_t {
 enum ADSP_NOTIFY_EVENT {
 	ADSP_EVENT_STOP = 0,
 	ADSP_EVENT_READY,
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+	ADSP_EVENT_MONITOR,
+#endif
 };
 
 /* adsp reset status */

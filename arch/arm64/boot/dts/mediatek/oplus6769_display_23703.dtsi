@@ -1,0 +1,107 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+* Copyright (C) 2020-2021 Oplus. All rights reserved.
+*/
+
+/*
+ * Add for display bringup
+ */
+
+/* lcm_bias:i2c0 */
+&i2c0 {
+	clock-frequency = <400000>;
+
+	ocp2130@3E {
+		compatible = "mediatek,i2c_lcd_bias";
+		reg = <0x3E>;
+		status = "okay";
+	};
+};
+
+&led6 {
+	led_mode = <4>;
+	data = <1>;
+	pwm_config = <0 3 0 0 0>;
+};
+
+/* DISPSYS GPIO standardization */
+&pio {
+	mtkfb_pins_lcm_rst_out1_gpio: lcm_rst_out1_gpio {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO45__FUNC_GPIO45>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+
+	mtkfb_pins_lcm_rst_out0_gpio: lcm_rst_out0_gpio {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO45__FUNC_GPIO45>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+
+	mtkfb_pins_lcm_dsi_te: lcm_dsi_te {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO44__FUNC_DSI_TE>;
+		};
+	};
+
+	mtkfb_pins_lcd_bias_enp1_gpio: lcd_bias_enp1_gpio {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO169__FUNC_GPIO169>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+
+	mtkfb_pins_lcd_bias_enp0_gpio: lcd_bias_enp0_gpio {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO169__FUNC_GPIO169>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+	mtkfb_pins_lcd_bias_enn1_gpio: lcd_bias_enn1_gpio {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO165__FUNC_GPIO165>;
+			slew-rate = <1>;
+			output-high;
+		};
+	};
+
+	mtkfb_pins_lcd_bias_enn0_gpio: lcd_bias_enn0_gpio {
+		pins_cmd_dat {
+			pinmux = <PINMUX_GPIO165__FUNC_GPIO165>;
+			slew-rate = <1>;
+			output-low;
+		};
+	};
+};
+
+&mtkfb {
+	pinctrl-names =
+		"lcm_rst_out1_gpio", "lcm_rst_out0_gpio",
+		"mode_te_te", "lcd_bias_enp1_gpio",
+		"lcd_bias_enp0_gpio",
+		"lcd_bias_enn1_gpio",
+		"lcd_bias_enn0_gpio";
+	pinctrl-0 = <&mtkfb_pins_lcm_rst_out1_gpio>;
+	pinctrl-1 = <&mtkfb_pins_lcm_rst_out0_gpio>;
+	pinctrl-2 = <&mtkfb_pins_lcm_dsi_te>;
+	pinctrl-3 = <&mtkfb_pins_lcd_bias_enp1_gpio>;
+	pinctrl-4 = <&mtkfb_pins_lcd_bias_enp0_gpio>;
+	pinctrl-5 = <&mtkfb_pins_lcd_bias_enn1_gpio>;
+	pinctrl-6 = <&mtkfb_pins_lcd_bias_enn0_gpio>;
+	status = "okay";
+
+	oplus_display_twelvebits_support;
+	oplus_display_cabc_support;
+	oplus_display_panel_cabc_support;
+	oplus_display_bls_diversion_support;
+	oplus_display_cabc_cmdq_support;
+	oplus_display_normal_max_brightness = <4095>;
+};
+
+/* DISPSYS GPIO standardization end*/

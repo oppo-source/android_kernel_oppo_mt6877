@@ -33,6 +33,8 @@ int disp_bls_set_backlight(int level_1024) { return 0; }
 #else
 int disp_bls_set_backlight(int level_1024);
 #endif
+int disp_bl_diversion_set_value(int level, void *cmdq);
+int disp_bls_diversion_set_value(int level);
 bool disp_pwm_is_osc(void);
 void disp_pwm_test(const char *cmd, char *debug_output);
 

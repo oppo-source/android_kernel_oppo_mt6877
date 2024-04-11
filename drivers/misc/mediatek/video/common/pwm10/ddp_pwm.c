@@ -100,8 +100,12 @@ static atomic_t g_pwm_is_change_state[PWM_TOTAL_MODULE_NUM] = {
 #ifndef CONFIG_FPGA_EARLY_PORTING
 static atomic_t g_pwm_backlight[PWM_TOTAL_MODULE_NUM] = { ATOMIC_INIT(-1) };
 static atomic_t g_pwm_en[PWM_TOTAL_MODULE_NUM] = { ATOMIC_INIT(-1) };
-static atomic_t g_pwm_max_backlight[PWM_TOTAL_MODULE_NUM] = {
-	ATOMIC_INIT(1023) };
+/* #ifndef OPLUS_BUG_STABILITY */
+/* static atomic_t g_pwm_max_backlight[PWM_TOTAL_MODULE_NUM] = {
+	ATOMIC_INIT(1023) }; */
+/* #else */
+static atomic_t g_pwm_max_backlight[PWM_TOTAL_MODULE_NUM] = { ATOMIC_INIT(2047) };
+/* #endif */ /* OPLUS_BUG_STABILITY */
 static atomic_t g_pwm_is_power_on[PWM_TOTAL_MODULE_NUM] = { ATOMIC_INIT(0) };
 static atomic_t g_pwm_value_before_power_off[PWM_TOTAL_MODULE_NUM] = {
 	ATOMIC_INIT(0) };
@@ -568,6 +572,10 @@ int disp_pwm_set_backlight_cmdq(enum disp_pwm_id_t id,
 	int abs_diff;
 	int max_level_1024;
 
+	/* #ifdef OPLUS_BUG_STABILITY */
+	return 0;
+	/* #endif */
+
 	if ((DISP_PWM_ALL & id) == 0) {
 		PWM_ERR("[ERROR] invalid id = 0x%x", id);
 		return -EFAULT;
@@ -628,6 +636,55 @@ int disp_pwm_set_backlight_cmdq(enum disp_pwm_id_t id,
 	}
 #endif
 	return 0;
+}
+
+static int diversion_old_value = 0;
+
+int disp_bl_diversion_set_value(int level, void *cmdq)
+{
+    int disp_pwm_id;
+    int max_level;
+    unsigned long reg_base;
+
+    disp_pwm_id = disp_pwm_get_main();
+    if ((DISP_PWM_ALL & disp_pwm_id) == 0) {
+        PWM_ERR("[ERROR] invalid disp_pwm_id = 0x%x", disp_pwm_id);
+        return -EFAULT;
+    }
+
+    max_level = disp_pwm_get_max_backlight(disp_pwm_id);
+    if (level > max_level)
+        level = max_level;
+    else if (level < 0)
+        level = 0;
+
+    PWM_ERR("samir:disp_bl_diversion_set_value:[%d]:[%d]:[%d]:[%d]", disp_pwm_id, max_level, diversion_old_value, level);
+    if (diversion_old_value == level) {
+        return 0;
+    }
+
+    reg_base = pwm_get_reg_base(disp_pwm_id);
+
+    if (level > 0) {
+        DISP_REG_MASK(cmdq, reg_base + DISP_PWM_CON_1_OFF, level << 16, 0x1fff << 16);
+        disp_pwm_set_enabled(cmdq, disp_pwm_id, 1);
+        diversion_old_value = level;
+    } else {
+        DISP_REG_MASK(cmdq, reg_base + DISP_PWM_CON_1_OFF, 1 << 16, 0x1fff << 16);
+        disp_pwm_set_enabled(cmdq, disp_pwm_id, 0);
+        diversion_old_value = 0;
+    }
+
+    DISP_REG_MASK(cmdq, reg_base + DISP_PWM_COMMIT_OFF, 1, ~0);
+    DISP_REG_MASK(cmdq, reg_base + DISP_PWM_COMMIT_OFF, 0, ~0);
+
+    return 0;
+}
+
+int disp_bls_diversion_set_value(int level)
+{
+	PWM_MSG("disp_bls_diversion_set_value:[%d]", level);
+	return disp_bl_diversion_set_value(level, NULL);
 }
 
 static int ddp_pwm_power_on(enum DISP_MODULE_ENUM module, void *handle)

@@ -19,13 +19,26 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/sched_clock.h>
 #include <linux/log2.h>
+#include <scp.h>
+#include <linux/delay.h>
 
 #include "hf_manager.h"
 
+// #define HF_MANAGER_DEBUG
 
 static int major;
 static struct class *hf_manager_class;
 static struct task_struct *task;
+
+struct stop_list {
+	struct list_head list;
+	struct hf_client *client;
+	struct hf_manager_cmd cmd;
+};
+static struct stop_list stop_client_list;
+atomic_t scp_stop;
+struct delayed_work scp_recovery_work;
+struct mutex stop_client_lock;
 
 struct coordinate {
 	int8_t sign[3];
@@ -1349,7 +1362,23 @@ static ssize_t hf_manager_write(struct file *filp,
 	if (copy_from_user(&cmd, buf, count))
 		return -EFAULT;
 
-	return hf_manager_drive_device(client, &cmd);
+	if (atomic_read(&scp_stop) == 1) {
+		struct stop_list* stop_client = (struct stop_list*)kzalloc(sizeof(struct stop_list), GFP_KERNEL);
+		if (!stop_client) {
+			return -1;
+		}
+
+		mutex_lock(&stop_client_lock);
+		stop_client->client = client;
+		memcpy(&stop_client->cmd, &cmd, sizeof(struct hf_manager_cmd));
+		INIT_LIST_HEAD(&stop_client->list);
+		list_add_tail(&stop_client->list, &stop_client_list.list);
+		pr_err("[oplus hf_manager] add sensor type:%d, action:%d\n", cmd.sensor_type, cmd.action);
+		mutex_unlock(&stop_client_lock);
+		return 0;
+	} else {
+		return hf_manager_drive_device(client, &cmd);
+	}
 }
 
 static unsigned int hf_manager_poll(struct file *filp,
@@ -1453,6 +1482,41 @@ static long hf_manager_ioctl(struct file *filp,
 	}
 	return 0;
 }
+
+static void stop_client_recovery_work(struct work_struct *dwork)
+{
+	struct stop_list *pos, *tmp;
+	int ret = -1;
+
+	mutex_lock(&stop_client_lock);
+	list_for_each_entry_safe(pos, tmp, &stop_client_list.list, list) {
+		ret = hf_manager_drive_device(pos->client, &pos->cmd);
+		pr_err("[oplus hf_manager] recovery ret: %d sensor:%d, action:%d\n", ret, pos->cmd.sensor_type, pos->cmd.action);
+		list_del(&pos->list);
+		kfree(pos);
+		pos = NULL;
+	}
+	mutex_unlock(&stop_client_lock);
+}
+
+static int scp_ready_event_hf_manager(struct notifier_block *this,
+     unsigned long event, void *ptr)
+{
+
+	if (event == SCP_EVENT_READY) {
+		atomic_set(&scp_stop, 0);
+		schedule_delayed_work(&scp_recovery_work, msecs_to_jiffies(50));
+		pr_err("[oplus hf_manager] scp ready\n");
+	} else if (event == SCP_EVENT_STOP) {
+		atomic_set(&scp_stop, 1);
+		pr_err("[oplus hf_manager] scp stop\n");
+	}
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block scp_ready_notifier_hf_manager = {
+    .notifier_call = scp_ready_event_hf_manager,
+};
 
 static const struct file_operations hf_manager_fops = {
 	.owner          = THIS_MODULE,
@@ -1623,6 +1687,13 @@ static int __init hf_manager_init(void)
 		goto err_device;
 	}
 	sched_setscheduler(task, SCHED_FIFO, &param);
+
+	scp_A_register_notify(&scp_ready_notifier_hf_manager);
+	INIT_LIST_HEAD(&stop_client_list.list);
+	atomic_set(&scp_stop, 0);
+	mutex_init(&stop_client_lock);
+	INIT_DELAYED_WORK(&scp_recovery_work, stop_client_recovery_work);
+
 	return 0;
 
 err_device:

@@ -1,0 +1,6 @@
+&sc8547charger {
+	oplus,cancel_primary_switch;
+};
+&hl7138charger {
+	oplus,cancel_primary_switch;
+};

@@ -48,9 +48,21 @@ void pe_idle1_entry(struct pd_port *pd_port)
 
 void pe_idle2_entry(struct pd_port *pd_port)
 {
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	uint32_t chip_pid = 0;
+	uint32_t rv1 = 0;
+	struct tcpc_device *tcpc = pd_port->tcpc;
+#endif
 	memset(&pd_port->pe_data, 0, sizeof(struct pe_data));
 	pd_set_rx_enable(pd_port, PD_RX_CAP_PE_IDLE);
 	pd_disable_timer(pd_port, PD_TIMER_PE_IDLE_TOUT);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal start*********/
+	rv1 = tcpci_get_chip_pid(tcpc, &chip_pid);
+	if (!rv1 && (SC6601_PID == chip_pid))
+		pd_disable_timer(pd_port, PD_TIMER_INT_INVAILD);
+/********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal end*********/
+#endif
 	pd_notify_pe_idle(pd_port);
 }
 
