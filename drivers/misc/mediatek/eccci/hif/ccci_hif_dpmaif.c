@@ -31,6 +31,7 @@
 #include <linux/tcp.h>
 #include <linux/ipv6.h>
 #include <net/ipv6.h>
+#include <linux/suspend.h>
 
 #include "ccci_core.h"
 #include "modem_sys.h"
@@ -2482,6 +2483,7 @@ static int dpmaif_wait_resume_done(void)
 			CCCI_NORMAL_LOG(-1, TAG,
 				"[%s] warning: suspend_flag = 1; (cnt: %d)",
 				__func__, cnt);
+			pm_system_wakeup();
 			return -1;
 		}
 	}
@@ -2538,6 +2540,14 @@ int dpmaif_tx_done_kernel_thread(void *arg)
 				__func__, txq->index);
 			continue;
 		}
+		
+		if (dpmaif_wait_resume_done()) {
+			//if resume not done, will waiting 1ms
+			hrtimer_start(&txq->tx_done_timer,
+				ktime_set(0, 1000000), HRTIMER_MODE_REL);
+			continue;
+		}
+
 		if (atomic_read(&txq->tx_resume_done)) {
 			CCCI_ERROR_LOG(dpmaif_ctrl->md_id, TAG,
 				"txq%d done/resume: 0x%x, 0x%x, 0x%x\n",
@@ -3787,13 +3797,13 @@ int dpmaif_late_init(unsigned char hif_id)
 			dpmaif_ctrl->dpmaif_irq_id, ret);
 		return ret;
 	}
-#ifdef MT6297
+
 	ret = irq_set_irq_wake(dpmaif_ctrl->dpmaif_irq_id, 1);
 	if (ret)
 		CCCI_ERROR_LOG(dpmaif_ctrl->md_id, TAG,
 			"irq_set_irq_wake dpmaif irq(%d) error %d\n",
 			dpmaif_ctrl->dpmaif_irq_id, ret);
-#endif
+
 	atomic_set(&dpmaif_ctrl->dpmaif_irq_enabled, 1); /* init */
 	dpmaif_disable_irq(dpmaif_ctrl);
 
@@ -4317,10 +4327,11 @@ void dpmaif_hw_reset(unsigned char md_id)
 
 	/* pre- DPMAIF HW reset: bus-protect */
 #ifdef MT6297
-	regmap_read(dpmaif_ctrl->plat_val.infra_ao_base, 0, &reg_value);
+	//#ifdef OPLUS_BUG_COMPATIBILITY
+	reg_value = ccci_read32(infra_ao_mem_base, 0);
 	reg_value &= ~INFRA_PROT_DPMAIF_BIT;
-	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
-		0,reg_value);
+	ccci_write32(infra_ao_mem_base, 0, reg_value);
+	//#endif OPLUS_BUG_COMPATIBILITY
 	CCCI_REPEAT_LOG(md_id, TAG, "%s:set prot:0x%x\n", __func__, reg_value);
 #else
 	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
@@ -4341,8 +4352,10 @@ void dpmaif_hw_reset(unsigned char md_id)
 	CCCI_NORMAL_LOG(md_id, TAG,
 		"infra_topaxi_protecten_1: 0x%x\n", reg_value);
 #endif
+	udelay(500);
+
 	/* DPMAIF HW reset */
-	CCCI_DEBUG_LOG(md_id, TAG, "%s:rst dpmaif\n", __func__);
+	CCCI_BOOTUP_LOG(md_id, TAG, "%s:rst dpmaif delay 500us\n", __func__);
 	/* reset dpmaif hw: AO Domain */
 #ifdef MT6297
 	reg_value = DPMAIF_AO_RST_MASK;/* so only this bit effective */
@@ -4354,7 +4367,9 @@ void dpmaif_hw_reset(unsigned char md_id)
 #endif
 	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
 		INFRA_RST0_REG_AO, reg_value);
-	CCCI_BOOTUP_LOG(md_id, TAG, "%s:clear reset\n", __func__);
+	udelay(500);
+
+	CCCI_BOOTUP_LOG(md_id, TAG, "%s:clear reset delay 500us\n", __func__);
 	/* reset dpmaif clr */
 #ifndef MT6297
 	reg_value = regmap_read(dpmaif_ctrl->plat_val.infra_ao_base,
@@ -4364,7 +4379,9 @@ void dpmaif_hw_reset(unsigned char md_id)
 #endif
 	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
 		INFRA_RST1_REG_AO, reg_value);
-	CCCI_BOOTUP_LOG(md_id, TAG, "%s:done\n", __func__);
+	CCCI_BOOTUP_LOG(md_id, TAG, "%s:done delay 500us\n", __func__);
+
+	udelay(500);
 
 	/* reset dpmaif hw: PD Domain */
 #ifdef MT6297
@@ -4378,6 +4395,9 @@ void dpmaif_hw_reset(unsigned char md_id)
 	regmap_write(dpmaif_ctrl->plat_val.infra_ao_base,
 		INFRA_RST0_REG_PD, reg_value);
 	CCCI_BOOTUP_LOG(md_id, TAG, "%s:clear reset\n", __func__);
+
+	udelay(500);
+
 	/* reset dpmaif clr */
 #ifndef MT6297
 	reg_value = regmap_read(dpmaif_ctrl->plat_val.infra_ao_base,
@@ -4570,6 +4590,11 @@ static int dpmaif_pre_stop(unsigned char hif_id)
 {
 	if (hif_id != DPMAIF_HIF_ID)
 		return -1;
+	
+	if (dpmaif_ctrl->dpmaif_state == HIFDPMAIF_STATE_PWROFF
+		|| dpmaif_ctrl->dpmaif_state == HIFDPMAIF_STATE_MIN)
+		return 0;
+
 	dpmaif_stop_hw();
 	return 0;
 }

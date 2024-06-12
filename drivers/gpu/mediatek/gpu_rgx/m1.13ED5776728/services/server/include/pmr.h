@@ -75,7 +75,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define PMR_MAX_TRANSLATION_STACK_ALLOC				(32)
 
 /* Maximum size PMR can have is 1G of memory */
-#define PMR_MAX_SUPPORTED_SIZE (0x40000000ULL)
+#define PMR_MAX_SUPPORTED_SIZE IMG_UINT64_C(0x200000000)
 /* Max number of pages in a PMR at 4k page size */
 #define PMR_MAX_SUPPORTED_4K_PAGE_COUNT (PMR_MAX_SUPPORTED_SIZE >> 12ULL)
 
@@ -488,14 +488,19 @@ PMR_WriteBytes(PMR *psPMR,
                 address space. The caller does not need to call
                 PMRLockSysPhysAddresses before calling this function.
 
-@Input          psPMR           PMR to map.
+@Input          psPMR            PMR to map.
 
-@Input          pOSMMapData     OS specific data needed to create a mapping.
+@Input          pOSMMapData      OS specific data needed to create a mapping.
+
+@Input          uiCpuAccessFlags Flags to indicate if the mapping request
+                                 requires read, write or both access.
 
 @Return         PVRSRV_ERROR:   PVRSRV_OK on success or an error otherwise.
 */ /**************************************************************************/
 PVRSRV_ERROR
-PMRMMapPMR(PMR *psPMR, PMR_MMAP_DATA pOSMMapData);
+PMRMMapPMR(PMR *psPMR,
+           PMR_MMAP_DATA pOSMMapData,
+           PVRSRV_MEMALLOCFLAGS_T uiCpuAccessFlags);
 
 /*
  * PMRRefPMR()
@@ -519,12 +524,56 @@ PVRSRV_ERROR
 PMRUnrefPMR(PMR *psPMR);
 
 /*
+ * PMRRefPMR2()
+ *
+ * Take a reference on the passed in PMR.
+ *
+ * This function does not perform address locking as opposed to PMRRefPMR().
+ */
+void
+PMRRefPMR2(PMR *psPMR);
+
+/*
+ * PMRUnrefPMR2()
+ *
+ * This undoes a call to any of the PhysmemNew* family of APIs
+ * (i.e. any PMR factory "constructor").
+ *
+ * This relinquishes a reference to the PMR, and, where the refcount
+ * reaches 0, causes the PMR to be destroyed (calling the finalizer
+ * callback on the PMR, if there is one)
+ */
+void
+PMRUnrefPMR2(PMR *psPMR);
+
+/*
  * PMRUnrefUnlockPMR()
  *
  * Same as above but also unlocks the PMR.
  */
 PVRSRV_ERROR
 PMRUnrefUnlockPMR(PMR *psPMR);
+
+/*
+ * PMRCpuMapCountIncr()
+ *
+ * Increment count of the number of current CPU mappings of the PMR.
+ *
+ */
+void
+PMRCpuMapCountIncr(PMR *psPMR);
+
+/*
+ * PMRCpuMapCountDecr()
+ *
+ * Decrement count of the number of current CPU mappings of the PMR.
+ *
+ */
+void
+PMRCpuMapCountDecr(PMR *psPMR);
+
+IMG_BOOL
+PMR_IsCpuMapped(PMR *psPMR);
 
 PPVRSRV_DEVICE_NODE
 PMR_DeviceNode(const PMR *psPMR);

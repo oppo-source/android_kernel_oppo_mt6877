@@ -149,6 +149,9 @@ static int g_aal_dre_en_cmd_id;
 static int g_aal_ess_en_cmd_id;
 #define aal_min(a, b)			(((a) < (b)) ? (a) : (b))
 
+#if (defined(OPLUS_BUG_STABILITY) && (defined(CONFIG_LEDS_MTK_DISP) || defined(CONFIG_LEDS_MTK_I2C)))
+extern int max_brightness_custom;
+#endif
 static bool isDualPQ;
 enum AAL_IOCTL_CMD {
 	INIT_REG = 0,
@@ -451,6 +454,7 @@ void disp_aal_notify_backlight_changed(int trans_backlight)
 {
 	unsigned long flags;
 	unsigned int service_flags;
+	int prev_backlight;
 
 	AALAPI_LOG("%d/%d\n", trans_backlight, g_max_backlight);
 	disp_aal_notify_backlight_log(trans_backlight);
@@ -459,9 +463,13 @@ void disp_aal_notify_backlight_changed(int trans_backlight)
 	if (trans_backlight > g_max_backlight)
 		trans_backlight = g_max_backlight;
 
+	prev_backlight = atomic_read(&g_aal_backlight_notified);
 	atomic_set(&g_aal_backlight_notified, trans_backlight);
 
 	service_flags = 0;
+	if ((prev_backlight == 0) && (prev_backlight != trans_backlight))
+		service_flags = AAL_SERVICE_FORCE_UPDATE;
+
 	if (trans_backlight == 0) {
 		mt_leds_brightness_set("lcd-backlight", 0);
 		/* set backlight = 0 may be not from AAL, */
@@ -474,6 +482,9 @@ void disp_aal_notify_backlight_changed(int trans_backlight)
 		/* AAL Service is not running */
 
 		mt_leds_brightness_set("lcd-backlight", trans_backlight);
+	} else {
+ 		mt_leds_brightness_set("lcd-backlight", trans_backlight);
+		service_flags = AAL_SERVICE_FORCE_UPDATE;
 	}
 
 	spin_lock_irqsave(&g_aal_hist_lock, flags);
@@ -502,6 +513,10 @@ int led_brightness_changed_event(struct notifier_block *nb, unsigned long event,
 			* led_conf->cdev.brightness
 			+ ((led_conf->cdev.max_brightness) / 2))
 			/ (led_conf->cdev.max_brightness));
+#if (defined(OPLUS_BUG_STABILITY) && (defined(CONFIG_LEDS_MTK_DISP) || defined(CONFIG_LEDS_MTK_I2C)))
+               	if(max_brightness_custom)
+                       trans_level = led_conf->cdev.brightness;
+#endif
 		if (led_conf->cdev.brightness != 0 &&
 			trans_level == 0)
 			trans_level = 1;
@@ -548,8 +563,20 @@ int mtk_drm_ioctl_aal_eventctl(struct drm_device *dev, void *data,
 	int ret = 0;
 	unsigned long flags, clockflags;
 	int *enabled = (int *)data;
+	int retry = 10;
 
 	AALFLOW_LOG("%d\n", *enabled);
+
+	if (*enabled) {
+		mtk_drm_idlemgr_kick(__func__,
+				&default_comp->mtk_crtc->base, 1);
+		mtk_crtc_check_trigger(comp->mtk_crtc, true, true);
+
+		while ((atomic_read(&aal_data->is_clock_on) != 1) && (retry != 0)) {
+			usleep_range(500, 1000);
+			retry--;
+		}
+	}
 
 	spin_lock_irqsave(&g_aal_irq_en_lock, flags);
 	if (atomic_read(&g_aal_force_enable_irq) == 1) {
@@ -912,10 +939,6 @@ static int disp_aal_copy_hist_to_user(struct DISP_AAL_HIST *hist)
 	g_aal_hist.ess_enable = g_aal_ess_en;
 	g_aal_hist.dre_enable = g_aal_dre_en;
 
-	g_aal_hist.serviceFlags = 0;
-	atomic_set(&g_aal0_hist_available, 0);
-	atomic_set(&g_aal1_hist_available, 0);
-
 	memcpy(&g_aal_hist_db, &g_aal_hist, sizeof(g_aal_hist));
 
 	spin_unlock_irqrestore(&g_aal_hist_lock, flags);
@@ -929,6 +952,10 @@ static int disp_aal_copy_hist_to_user(struct DISP_AAL_HIST *hist)
 	ret = copy_to_user(AAL_U32_PTR(g_aal_init_dre30.dre30_hist_addr),
 		&g_aal_dre30_hist_db, sizeof(g_aal_dre30_hist_db));
 #endif
+
+	g_aal_hist.serviceFlags = 0;
+	atomic_set(&g_aal0_hist_available, 0);
+	atomic_set(&g_aal1_hist_available, 0);
 
 	AALFLOW_LOG("%s set g_aal_force_enable_irq to 0 +\n", __func__);
 	atomic_set(&g_aal_force_enable_irq, 0);

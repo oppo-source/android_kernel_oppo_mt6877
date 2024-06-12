@@ -810,9 +810,12 @@ int do_ptim_internal(bool isSuspend, unsigned int *bat,
 	unsigned int vbat_reg = 0;
 	unsigned int count_adc_imp = 0;
 	int ret = 0;
-#if !(defined(CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6877))
+/* ifdef OPLUS_FEATURE_CHG_BASIC */
+/*#if !(defined(CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6877))
 	unsigned char *r_ratio = NULL;
-#endif
+#endif*/
+	unsigned char *r_ratio = NULL;
+/* endif */
 
 	/* selection setting, move to LK pmic_dlpt_init */
 
@@ -833,12 +836,16 @@ int do_ptim_internal(bool isSuspend, unsigned int *bat,
 	pmic_set_hk_reg_value(PMIC_AUXADC_IMP_EN, 0);
 
 //TODO MIgration
-#if defined(CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6877)
+/* ifdef OPLUS_FEATURE_CHG_BASIC */
+/*#if defined(CONFIG_MACH_MT6833) || defined(CONFIG_MACH_MT6877)
 	*bat = (vbat_reg * 3 * 18000) / 32768;
 #else
 	r_ratio = auxadc_get_r_ratio(AUXADC_BATADC);
 	*bat = (vbat_reg * 18000 * r_ratio[0] / r_ratio[1]) >> 15;
-#endif
+#endif*/
+	r_ratio = auxadc_get_r_ratio(AUXADC_BATADC);
+        *bat = (vbat_reg * 18000 * r_ratio[0] / r_ratio[1]) >> 15;
+/* endif */
 #if (CONFIG_MTK_GAUGE_VERSION == 30)
 	gauge_get_ptim_current(cur, is_charging);
 #else
@@ -1366,6 +1373,11 @@ void dlpt_notify_init(void)
 }
 
 #else
+
+void register_dlpt_notify(void (*dlpt_callback)(unsigned int val),
+       enum DLPT_PRIO_TAG prio_val)
+{ }
+
 int get_dlpt_imix_spm(void)
 {
 	return 1;
