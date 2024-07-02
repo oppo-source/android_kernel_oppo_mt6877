@@ -159,6 +159,15 @@ struct _PMR_
 
 	ATOMIC_T iRefCount;
 
+	/* CPU mapping count - this is the number of times the PMR has been
+	 * mapped to the CPU. It is used to determine when it is safe to permit
+	 * modification of a sparse allocation's layout.
+	 * Note that the process of mapping also increments iRefCount
+	 * independently (as that is used to determine when a PMR may safely
+	 * be destroyed).
+	 */
+	ATOMIC_T iCpuMapCount;
+
 	/* Lock count - this is the number of times PMRLockSysPhysAddresses()
 	 * has been called, less the number of PMRUnlockSysPhysAddresses()
 	 * calls. This is arguably here for debug reasons only, as the refcount
@@ -402,6 +411,7 @@ _PMRCreate(PMR_SIZE_T uiLogicalSize,
 
 	/* Setup the PMR */
 	OSAtomicWrite(&psPMR->iRefCount, 0);
+	OSAtomicWrite(&psPMR->iCpuMapCount, 0);
 
 	/* If allocation is not made on demand, it will be backed now and
 	 * backing will not be removed until the PMR is destroyed, therefore
@@ -1416,6 +1426,12 @@ PMR_ReadBytes(PMR *psPMR,
 	IMG_DEVMEM_OFFSET_T uiPhysicalOffset;
 	size_t uiBytesCopied = 0;
 
+	/* Check for integer overflow as uiLogicalOffset might come from the client */
+	if (uiLogicalOffset + uiBufSz < uiLogicalOffset)
+	{
+		return PVRSRV_ERROR_INVALID_PARAMS;
+	}
+
 	if (uiLogicalOffset + uiBufSz > psPMR->uiLogicalSize)
 	{
 		uiBufSz = TRUNCATE_64BITS_TO_32BITS(psPMR->uiLogicalSize - uiLogicalOffset);
@@ -1567,6 +1583,12 @@ PMR_WriteBytes(PMR *psPMR,
 	IMG_DEVMEM_OFFSET_T uiPhysicalOffset;
 	size_t uiBytesCopied = 0;
 
+	/* Check for integer overflow as uiLogicalOffset might come from the client */
+	if (uiLogicalOffset + uiBufSz < uiLogicalOffset)
+	{
+		return PVRSRV_ERROR_INVALID_PARAMS;
+	}
+
 	if (uiLogicalOffset + uiBufSz > psPMR->uiLogicalSize)
 	{
 		uiBufSz = TRUNCATE_64BITS_TO_32BITS(psPMR->uiLogicalSize - uiLogicalOffset);
@@ -1666,6 +1688,51 @@ PMRUnrefUnlockPMR(PMR *psPMR)
 	PMRUnrefPMR(psPMR);
 
 	return PVRSRV_OK;
+}
+
+#define PMR_CPUMAPCOUNT_MIN 0
+#define PMR_CPUMAPCOUNT_MAX IMG_INT32_MAX
+void
+PMRCpuMapCountIncr(PMR *psPMR)
+{
+	IMG_BOOL bSuccess;
+
+	bSuccess = OSAtomicAddUnless(&psPMR->iCpuMapCount, 1,
+	                             PMR_CPUMAPCOUNT_MAX);
+	if (!bSuccess)
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s: iCpuMapCount for PMR: @0x%p (%s) has overflowed.",
+		                        __func__,
+		                        psPMR,
+		                        psPMR->szAnnotation));
+		OSWarnOn(1);
+	}
+}
+
+void
+PMRCpuMapCountDecr(PMR *psPMR)
+{
+	IMG_BOOL bSuccess;
+
+	bSuccess = OSAtomicSubtractUnless(&psPMR->iCpuMapCount, 1,
+	                                  PMR_CPUMAPCOUNT_MIN);
+	if (!bSuccess)
+	{
+		PVR_DPF((PVR_DBG_ERROR, "%s: iCpuMapCount (now %d) for PMR: @0x%p (%s) has underflowed.",
+		                        __func__,
+		                        (IMG_INT32) OSAtomicRead(&psPMR->iCpuMapCount),
+		                        psPMR,
+		                        psPMR->szAnnotation));
+		OSWarnOn(1);
+	}
+}
+
+static IMG_BOOL
+_PMR_IsMapped(PMR *psPMR)
+{
+	PVR_ASSERT(psPMR != NULL);
+
+	return (OSAtomicRead(&psPMR->iCpuMapCount) > 0);
 }
 
 PVRSRV_DEVICE_NODE *
@@ -1959,6 +2026,15 @@ PVRSRV_ERROR PMR_ChangeSparseMem(PMR *psPMR,
                                  IMG_UINT32 uiSparseFlags)
 {
 	PVRSRV_ERROR eError;
+
+	if (_PMR_IsMapped(psPMR))
+	{
+		PVR_DPF((PVR_DBG_ERROR,
+				"%s: This PMR layout cannot be changed - _PMR_IsMapped()=%c",
+				__func__,
+				_PMR_IsMapped(psPMR) ? 'Y' : 'n'));
+		return PVRSRV_ERROR_PMR_NOT_PERMITTED;
+	}
 
 	if (NULL == psPMR->psFuncTab->pfnChangeSparseMem)
 	{
@@ -3064,6 +3140,8 @@ PMRWritePMPageList(/* Target PMR, offset, and length */
 		PVR_GOTO_WITH_ERROR(eError, PVRSRV_ERROR_PMR_NOT_PAGE_MULTIPLE, return_error);
 	}
 
+	/* Check for integer overflow */
+	PVR_GOTO_IF_INVALID_PARAM(uiTableOffset + uiTableLength > uiTableOffset, eError, return_error);
 	/* Check we're not being asked to write off the end of the PMR */
 	PVR_GOTO_IF_INVALID_PARAM(uiTableOffset + uiTableLength <= psPageListPMR->uiLogicalSize, eError, return_error);
 

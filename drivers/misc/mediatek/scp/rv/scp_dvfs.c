@@ -480,6 +480,13 @@ void scp_init_vcore_request(void)
 		scp_vcore_request(dvfs.opp[0].freq);
 }
 
+void check_scp_current_freq(void)
+{
+	scp_current_freq = readl(CURRENT_FREQ_REG);
+	if (scp_current_freq > dvfs.opp[dvfs.scp_opp_nums - 1].freq)
+		scp_current_freq = 0;
+}
+
 int scp_request_freq_vcore(void)
 {
 	int timeout = 50;
@@ -498,6 +505,7 @@ int scp_request_freq_vcore(void)
 	 */
 	__pm_stay_awake(scp_suspend_lock);
 
+	check_scp_current_freq();
 	if (scp_current_freq != scp_expected_freq) {
 
 		scp_awake_lock((void *)SCP_A_ID);

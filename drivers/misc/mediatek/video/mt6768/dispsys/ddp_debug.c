@@ -420,6 +420,17 @@ static void process_dbg_opt(const char *opt)
 		} else {
 			goto Error;
 		}
+	} else if (strncmp(opt, "bl_diversion:", 13) == 0) {
+		char *p = (char *)opt + 13;
+		unsigned int level = 0;
+
+		ret = kstrtouint(p, 0, &level);
+		if (ret) {
+			snprintf(buf, 50, "error to parse cmd %s\n", opt);
+			return;
+		}
+		disp_bl_diversion_set_value(level, NULL);
+		sprintf(buf, "bl_diversion: %d\n", level);
 	} else if (strncmp(opt, "rdma_color:", 11) == 0) {
 		if (strncmp(opt + 11, "on", 2) == 0) {
 			/* char *p = (char *)opt + 14; */

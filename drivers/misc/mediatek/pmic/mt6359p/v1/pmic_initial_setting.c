@@ -14,7 +14,11 @@
 #include "include/pmic.h"
 #include "include/pmic_api.h"
 #include "include/pmic_api_buck.h"
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/*********workaround：error code start issue NO.230506103757615893********/
+extern bool pmic_not_support_lpm;
+/*********workaround：error code end********/
+#endif
 #define LP_INIT_SETTING_VERIFIED 1
 
 unsigned int g_pmic_chip_version = 1;
@@ -104,10 +108,13 @@ unsigned int PMIC_CHIP_VER(void)
 void PMIC_LP_INIT_SETTING(void)
 {
 	g_pmic_chip_version = PMIC_CHIP_VER();
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	pmic_config_interface(MT6359_LDO_VIO18_CON1, 0, PMIC_RG_LDO_VIO18_OP_MODE_MASK, PMIC_RG_LDO_VIO18_OP_MODE_SHIFT);
+#endif
 #if LP_INIT_SETTING_VERIFIED
 	/*SODI3*/
 	pmic_buck_vcore_lp(SRCLKEN1, 0, 1, HW_OFF);
-	pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);
+	/*pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);*/
 	pmic_buck_vproc1_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vproc2_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vgpu11_lp(SRCLKEN0, 1, 1, HW_LP);
@@ -149,7 +156,7 @@ void PMIC_LP_INIT_SETTING(void)
 
 	/*Deepidle*/
 	pmic_buck_vcore_lp(SRCLKEN1, 0, 1, HW_OFF);
-	pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);
+	/*pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);*/
 	pmic_buck_vproc1_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vproc2_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vgpu11_lp(SRCLKEN2, 1, 1, HW_LP);
@@ -202,7 +209,7 @@ void PMIC_LP_INIT_SETTING(void)
 	/* For RF setting: If PL set Multi-user mode, need to sync it */
 	/*SODI3*/
 	pmic_buck_vcore_lp(SRCLKEN1, 0, 1, HW_OFF);
-	pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);
+	/*pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);*/
 	pmic_buck_vproc1_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vproc2_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vgpu11_lp(SRCLKEN0, 1, 1, HW_LP);
@@ -244,7 +251,7 @@ void PMIC_LP_INIT_SETTING(void)
 
 	/*Deepidle*/
 	pmic_buck_vcore_lp(SRCLKEN1, 0, 1, HW_OFF);
-	pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);
+	/*pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);*/
 	pmic_buck_vproc1_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vproc2_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vgpu11_lp(SRCLKEN2, 1, 1, HW_LP);
@@ -294,7 +301,7 @@ void PMIC_LP_INIT_SETTING(void)
 #if LP_INIT_SETTING_VERIFIED
 	/*SODI3*/
 	pmic_buck_vcore_lp(SRCLKEN0, 1, 1, HW_LP);
-	pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);
+	/*pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);*/
 	pmic_buck_vproc1_lp(SW, 1, 1, SW_OFF);
 #ifdef CONFIG_REGULATOR_MT6315 /* MTK_5G_B_MT6360_MT6315 */
 	pmic_buck_vproc2_lp(SW, 1, 1, SW_OFF); /* for CPU-L */
@@ -344,7 +351,7 @@ void PMIC_LP_INIT_SETTING(void)
 
 	/*Deepidle*/
 	pmic_buck_vcore_lp(SRCLKEN2, 1, 1, HW_LP);
-	pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);
+	/*pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);*/
 	pmic_buck_vproc1_lp(SW, 1, 1, SW_OFF);
 #ifdef CONFIG_REGULATOR_MT6315 /* MTK_5G_B_MT6360_MT6315 */
 	pmic_buck_vproc2_lp(SW, 1, 1, SW_OFF); /* for CPU-L */
@@ -399,17 +406,26 @@ void PMIC_LP_INIT_SETTING(void)
 void PMIC_LP_INIT_SETTING(void)
 {
 	g_pmic_chip_version = PMIC_CHIP_VER();
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	pmic_config_interface(MT6359_LDO_VIO18_CON1, 0, PMIC_RG_LDO_VIO18_OP_MODE_MASK, PMIC_RG_LDO_VIO18_OP_MODE_SHIFT);
+#endif
 #if LP_INIT_SETTING_VERIFIED
 	/* For RF setting: If PL set Multi-user mode, need to sync it */
 	/*SODI3*/
 	pmic_buck_vcore_lp(SRCLKEN1, 0, 1, HW_OFF);
-	pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);
+	/*pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);*/
 	pmic_buck_vproc1_lp(SRCLKEN0, 1, 1, HW_LP);
 	pmic_buck_vproc2_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vgpu11_lp(SRCLKEN0, 1, 1, HW_LP);
 	pmic_buck_vgpu12_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vmodem_lp(SRCLKEN1, 0, 1, HW_OFF);
-	pmic_buck_vs1_lp(SRCLKEN0, 1, 1, HW_LP);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/*********workaround：error code start issue NO.230506103757615893********/
+	if (!pmic_not_support_lpm) {
+		pmic_buck_vs1_lp(SRCLKEN0, 1, 1, HW_LP);
+	}
+/*********workaround：error code end********/
+#endif
 	pmic_buck_vs2_lp(SRCLKEN0, 1, 1, HW_LP);
 	pmic_buck_vpa_lp(SW, 1, 1, SW_OFF);
 	pmic_ldo_vsram_proc1_lp(SW, 1, 1, SW_OFF);
@@ -445,13 +461,19 @@ void PMIC_LP_INIT_SETTING(void)
 
 	/*Deepidle*/
 	pmic_buck_vcore_lp(SRCLKEN1, 0, 1, HW_OFF);
-	pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);
+	/*pmic_buck_vpu_lp(SRCLKEN1, 1, 1, HW_LP);*/
 	pmic_buck_vproc1_lp(SRCLKEN2, 1, 1, HW_LP);
 	pmic_buck_vproc2_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vgpu11_lp(SRCLKEN2, 1, 1, HW_LP);
 	pmic_buck_vgpu12_lp(SW, 1, 1, SW_OFF);
 	pmic_buck_vmodem_lp(SRCLKEN1, 0, 1, HW_OFF);
-	pmic_buck_vs1_lp(SRCLKEN2, 1, 1, HW_LP);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/*********workaround：error code start issue NO.230506103757615893********/
+	if (!pmic_not_support_lpm) {
+		pmic_buck_vs1_lp(SRCLKEN2, 1, 1, HW_LP);
+	}
+/*********workaround：error code end********/
+#endif
 	pmic_buck_vs2_lp(SRCLKEN2, 1, 1, HW_LP);
 	pmic_buck_vpa_lp(SW, 1, 1, SW_OFF);
 	pmic_ldo_vsram_proc1_lp(SW, 1, 1, SW_OFF);

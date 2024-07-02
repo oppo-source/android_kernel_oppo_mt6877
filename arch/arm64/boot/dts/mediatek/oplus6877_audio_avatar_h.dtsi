@@ -1,0 +1,65 @@
+&audio_extend {
+	//for sipa speaker
+	oplus,speaker-vendor = "awinic_digital";
+	oplus,speaker-i2s-id = <3>;
+	oplus,speaker-i2s-id-in = <0>;
+	oplus,speaker-codec-name = "aw882xx_smartpa.6-0034";
+	oplus,speaker-codec-dai-name = "aw882xx-aif-6-34";
+};
+
+&odm {
+	discrete_typec_switch: discrete_typec_switch {
+		compatible = "oplus,discrete_typec_switch";
+		oplus,hs-det-bypass = <1>;
+		oplus,lr-sel-gpio = <&pio 33 0>;
+		oplus,lr-sel-level = <1>;
+		oplus,mic-gnd-swh-gpio = <&pio 35 0>;
+		oplus,mic-gnd-swh-level = <0>;
+		oplus,mic-gnd-swh-2nd-gpio = <&pio 31 0>;
+		oplus,mic-gnd-swh-2nd-level = <0>;
+		oplus,switch-enable-gpio = <&pio 166 0>;
+		oplus,switch-enable-level = <0>;
+		status = "okay";
+	};
+};
+
+&accdet {
+	hs-det-discrete = <1>;
+};
+
+&i2c6 {
+	aw882xx_smartpa_0: aw882xx_smartpa@34 {
+	compatible = "awinic,aw882xx_smartpa";
+	#sound-dai-cells = <0>;
+	reg = <0x34>;
+	dc-flag = <0>;
+	sync-flag = <0>;
+	sound-channel = <0>;
+	aw-re-min = <5000>;
+	aw-re-max= <8000>;
+	aw-f0-min = <800>;
+	aw-f0-max = <1150>;
+	aw-cali-mode = "aw_misc";
+	aw-cali-check = <0>;
+	need_f0_cali = <1>;
+	status = "okay";
+	};
+};
+
+&sound {
+ 	mtk_spk_i2s_out = <3>;
+ 	mtk_spk_i2s_in = <9>;
+	//mediatek,spk-i2s = <3 9>; /*<MTK_SPK_I2S_3, MTK_SPK_TINYCONN_I2S_0>*/
+	mediatek,speaker-codec {
+		sound-dai = <&aw882xx_smartpa_0>;
+	};
+};
+
+&adsp_core0 {
+	system = <0 0x56000000 0 0xC00000>;
+};
+
+&mt6359_snd {
+	mediatek,micbias0-mv = <2700>;
+	mediatek,micbias2-mv = <2700>;
+};

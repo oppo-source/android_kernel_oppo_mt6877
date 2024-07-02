@@ -64,6 +64,9 @@
 #define SCP_sensorHub_DEV_NAME "SCP_sensorHub"
 
 #define CHRE_POWER_RESET_NOTIFY
+#ifdef OPLUS_FEATURE_SENSOR_ALGORITHM
+extern void oplus_init_sensor_state(struct SensorState *mSensorState);
+#endif /*OPLUS_FEATURE_SENSOR_ALGORITHM*/
 
 static int sensor_send_timestamp_to_hub(void);
 static int SCP_sensorHub_server_dispatch_data(uint32_t *currWp);
@@ -463,6 +466,11 @@ int scp_sensorHub_data_registration(uint8_t sensor,
 	if (handler == NULL)
 		pr_err("SCP_sensorHub_rsp_registration null handler\n");
 
+	if (obj_data == NULL) {
+		pr_err("SCP_sensorHub_rsp_registration null obj_data\n");
+		return -1;
+	}
+
 	obj->dispatch_data_cb[sensor] = handler;
 
 	return 0;
@@ -611,6 +619,14 @@ SCP_sensorHub_set_timestamp_cmd(union SCP_SENSOR_HUB_DATA *rsp,
 {
 	SCP_sensorHub_xcmd_putdata(rsp, rx_len);
 }
+#ifdef OPLUS_FEATURE_SENSOR
+static void
+SCP_sensorHub_set_oplus_cmd(union SCP_SENSOR_HUB_DATA *rsp,
+					int rx_len)
+{
+	SCP_sensorHub_xcmd_putdata(rsp, rx_len);
+}
+#endif
 
 static void SCP_sensorHub_moving_average(union SCP_SENSOR_HUB_DATA *rsp)
 {
@@ -743,11 +759,21 @@ static void SCP_sensorHub_IPI_handler(int id,
 	/*pr_err("sensorType:%d, action=%d event:%d len:%d\n",
 	 * rsp->rsp.sensorType, rsp->rsp.action, rsp->notify_rsp.event, len);
 	 */
+	#ifndef OPLUS_FEATURE_SENSOR
 	cmd = SCP_sensorHub_find_cmd(rsp->rsp.action);
 	if (cmd != NULL)
 		cmd->handler(rsp, len);
 	else
 		pr_err("cannot find cmd!\n");
+	#else
+	cmd = SCP_sensorHub_find_cmd(rsp->rsp.action);
+	if (cmd != NULL)
+		cmd->handler(rsp, len);
+	else {
+		pr_err("cannot find cmd! try to find oplus cmd\n");
+		SCP_sensorHub_set_oplus_cmd(rsp,len);
+	}
+	#endif
 }
 
 static void SCP_sensorHub_init_sensor_state(void)
@@ -907,6 +933,16 @@ static void SCP_sensorHub_init_sensor_state(void)
 
 	mSensorState[SENSOR_TYPE_SAR].sensorType = SENSOR_TYPE_SAR;
 	mSensorState[SENSOR_TYPE_SAR].timestamp_filter = false;
+
+	mSensorState[SENSOR_TYPE_REAR_ALS].sensorType = SENSOR_TYPE_REAR_ALS;
+	mSensorState[SENSOR_TYPE_REAR_ALS].timestamp_filter = false;
+
+	mSensorState[SENSOR_TYPE_REAR_FLICKER].sensorType = SENSOR_TYPE_REAR_FLICKER;
+	mSensorState[SENSOR_TYPE_REAR_FLICKER].timestamp_filter = false;
+
+	#ifdef OPLUS_FEATURE_SENSOR_ALGORITHM
+	oplus_init_sensor_state(mSensorState);
+	#endif /*OPLUS_FEATURE_SENSOR_ALGORITHM*/
 }
 
 static void init_sensor_config_cmd(struct ConfigCmd *cmd,
@@ -1730,11 +1766,40 @@ int sensor_get_data_from_hub(uint8_t sensorType,
 		data->floor_counter_t.accumulated_floor_count
 		    = data_t->floor_counter_t.accumulated_floor_count;
 		break;
+#ifdef OPLUS_FEATURE_SENSOR
+	case ID_SAR:
+		data->time_stamp = data_t->time_stamp;
+		data->data[0] = data_t->data[0];
+		data->data[1] = data_t->data[1];
+		data->data[2] = data_t->data[2];
+		data->data[3] = data_t->data[3];
+		data->data[4] = data_t->data[4];
+		data->data[5] = data_t->data[5];
+		data->data[6] = data_t->data[6];
+		data->data[7] = data_t->data[7];
+		break;
+#else
 	case ID_SAR:
 		data->time_stamp = data_t->time_stamp;
 		data->sar_event.data[0] = data_t->sar_event.data[0];
 		data->sar_event.data[1] = data_t->sar_event.data[1];
 		data->sar_event.data[2] = data_t->sar_event.data[2];
+		break;
+#endif
+	case ID_REAR_ALS:
+		data->time_stamp = data_t->time_stamp;
+		data->light = data_t->light;
+		break;
+	case ID_REAR_REAR_FLICKER:
+		data->time_stamp = data_t->time_stamp;
+		data->data[0] = data_t->data[0];
+		data->data[1] = data_t->data[1];
+		data->data[2] = data_t->data[2];
+		data->data[3] = data_t->data[3];
+		data->data[4] = data_t->data[4];
+		data->data[5] = data_t->data[5];
+		data->data[6] = data_t->data[6];
+		data->data[7] = data_t->data[7];
 		break;
 	default:
 		err = -1;
@@ -2097,6 +2162,122 @@ int sensor_set_cmd_to_hub(uint8_t sensorType,
 			return -1;
 		}
 		break;
+	case ID_REAR_CCT:
+		req.set_cust_req.sensorType = ID_REAR_CCT;
+		req.set_cust_req.action = SENSOR_HUB_SET_CUST;
+		switch (action) {
+		case CUST_ACTION_GET_SENSOR_INFO:
+			req.set_cust_req.getInfo.action =
+				CUST_ACTION_GET_SENSOR_INFO;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getInfo);
+			break;
+		default:
+			return -1;
+		}
+		break;
+	case ID_REAR_ALS:
+		req.set_cust_req.sensorType = ID_REAR_ALS;
+		req.set_cust_req.action = SENSOR_HUB_SET_CUST;
+		switch (action) {
+		case CUST_ACTION_GET_RAW_DATA:
+			req.set_cust_req.getRawData.action =
+				CUST_ACTION_GET_RAW_DATA;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getRawData);
+			err = scp_sensorHub_req_send(&req, &len, 1);
+			if (err == 0) {
+				if ((req.set_cust_rsp.action !=
+					SENSOR_HUB_SET_CUST)
+					|| (req.set_cust_rsp.errCode != 0)) {
+					pr_err("scp_sHub_req_send fail!\n");
+					return -1;
+				}
+				if (req.set_cust_rsp.getRawData.action !=
+					CUST_ACTION_GET_RAW_DATA) {
+					pr_err("scp_sHub_req_send fail!\n");
+					return -1;
+				}
+				pGetRawData = &req.set_cust_rsp.getRawData;
+				*((uint8_t *) data) =
+					pGetRawData->uint8_data[0];
+			} else {
+				pr_err("scp_sensorHub_req_send failed!\n");
+			}
+			return 0;
+		case CUST_ACTION_SHOW_ALSLV:
+			req.set_cust_req.showAlslv.action =
+				CUST_ACTION_SHOW_ALSLV;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.showAlslv);
+			break;
+		case CUST_ACTION_SHOW_ALSVAL:
+			req.set_cust_req.showAlsval.action =
+				CUST_ACTION_GET_RAW_DATA;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.showAlsval);
+			break;
+		case CUST_ACTION_GET_SENSOR_INFO:
+			req.set_cust_req.getInfo.action =
+				CUST_ACTION_GET_SENSOR_INFO;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getInfo);
+			break;
+		default:
+			return -1;
+		}
+		break;
+	case ID_REAR_REAR_FLICKER:
+		req.set_cust_req.sensorType = ID_REAR_REAR_FLICKER;
+		req.set_cust_req.action = SENSOR_HUB_SET_CUST;
+		switch (action) {
+		case CUST_ACTION_GET_RAW_DATA:
+			req.set_cust_req.getRawData.action =
+				CUST_ACTION_GET_RAW_DATA;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getRawData);
+			err = scp_sensorHub_req_send(&req, &len, 1);
+			if (err == 0) {
+				if ((req.set_cust_rsp.action !=
+					SENSOR_HUB_SET_CUST)
+					|| (req.set_cust_rsp.errCode != 0)) {
+					pr_err("scp_sHub_req_send fail!\n");
+					return -1;
+				}
+				if (req.set_cust_rsp.getRawData.action !=
+					CUST_ACTION_GET_RAW_DATA) {
+					pr_err("scp_sHub_req_send fail!\n");
+					return -1;
+				}
+				pGetRawData = &req.set_cust_rsp.getRawData;
+				*((uint8_t *) data) =
+					pGetRawData->uint8_data[0];
+			} else {
+				pr_err("scp_sensorHub_req_send failed!\n");
+			}
+			return 0;
+		case CUST_ACTION_SHOW_ALSLV:
+			req.set_cust_req.showAlslv.action =
+				CUST_ACTION_SHOW_ALSLV;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.showAlslv);
+			break;
+		case CUST_ACTION_SHOW_ALSVAL:
+			req.set_cust_req.showAlsval.action =
+				CUST_ACTION_GET_RAW_DATA;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.showAlsval);
+			break;
+		case CUST_ACTION_GET_SENSOR_INFO:
+			req.set_cust_req.getInfo.action =
+				CUST_ACTION_GET_SENSOR_INFO;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.getInfo);
+			break;
+		default:
+			return -1;
+		}
+		break;
 	default:
 		req.set_cust_req.sensorType = sensorType;
 		req.set_cust_req.action = SENSOR_HUB_SET_CUST;
@@ -2271,7 +2452,7 @@ static int sensorHub_probe(struct platform_device *pdev)
 	struct task_struct *task_power_reset = NULL;
 	struct sched_param param = { .sched_priority = MAX_RT_PRIO - 1 };
 
-	pr_debug("%s\n", __func__);
+	pr_err("%s\n", __func__);
 	SCP_sensorHub_init_sensor_state();
 	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
 	if (!obj) {
@@ -2552,7 +2733,8 @@ static struct notifier_block sensorHub_pm_notifier_func = {
 static int __init SCP_sensorHub_init(void)
 {
 	SCP_sensorHub_ipi_master_init();
-	pr_debug("%s\n", __func__);
+	pr_err("%s\n", __func__);
+
 	if (platform_device_register(&sensorHub_device)) {
 		pr_err("SCP_sensorHub platform device error\n");
 		return -1;

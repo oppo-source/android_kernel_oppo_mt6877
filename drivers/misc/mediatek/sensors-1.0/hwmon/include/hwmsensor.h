@@ -11,6 +11,9 @@
 #ifdef CONFIG_COMPAT
 #include <linux/compat.h>
 #endif
+#ifdef OPLUS_FEATURE_SENSOR_ALGORITHM
+#include <oplussensor.h>
+#endif /*OPLUS_FEATURE_SENSOR_ALGORITHM*/
 /* follow google default sensor type */
 #define SENSOR_TYPE_ACCELEROMETER                      1
 #define SENSOR_TYPE_MAGNETIC_FIELD                     2
@@ -68,8 +71,11 @@
 #define SENSOR_TYPE_RGBW                               70
 #define SENSOR_TYPE_GYRO_TEMPERATURE                   71
 #define SENSOR_TYPE_SAR                                72
+#ifndef OPLUS_FEATURE_SENSOR_ALGORITHM
 /* end sensor type */
 #define SENSOR_TYPE_MAX_NUM                            SENSOR_TYPE_SAR
+#endif /*OPLUS_FEATURE_SENSOR_ALGORITHM*/
+
 #define SENSOR_TYPE_MAX_NUM_PLUS_ONE                   (SENSOR_TYPE_MAX_NUM + 1)
 
 /*---------------------------------------------------------------------------*/
@@ -141,8 +147,10 @@
 #define ID_RGBW                 (ID_BASE + SENSOR_TYPE_RGBW - 1)
 #define ID_GYRO_TEMPERATURE     (ID_BASE + SENSOR_TYPE_GYRO_TEMPERATURE - 1)
 #define ID_SAR                  (ID_BASE + SENSOR_TYPE_SAR - 1)
+#ifndef OPLUS_FEATURE_SENSOR_ALGORITHM
 /* end sensor ID */
 #define ID_SENSOR_MAX_HANDLE    (ID_SAR)
+#endif /*OPLUS_FEATURE_SENSOR_ALGORITHM*/
 #define ID_SENSOR_MAX_HANDLE_PLUS_ONE    (ID_SENSOR_MAX_HANDLE + 1)
 
 #if (ID_SENSOR_MAX_HANDLE_PLUS_ONE != SENSOR_TYPE_MAX_NUM)
@@ -281,6 +289,9 @@
 
 #define BIO_MISC_DEV_NAME "m_bio_misc"
 
+#define REAR_ALS_MISC_DEV_NAME "m_rear_als_misc"
+#define REAR_FLICKER_MISC_DEV_NAME "m_rear_flicker_misc"
+
 #define EVENT_TYPE_SENSOR 0x01
 #define EVENT_TYPE_SENSOR_EXT 0x02
 #define EVENT_SENSOR_ACCELERATION SENSOR_ACCELEROMETER
@@ -306,7 +317,7 @@ struct hwm_sensor_data {
 	int sensor;
 	/* sensor values */
 	union {
-		int values[6];
+		int values[8];
 		uint8_t probability[12];
 	};
 	/* sensor values divide */
