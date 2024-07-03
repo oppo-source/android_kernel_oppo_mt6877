@@ -1,0 +1,8 @@
+
+config MTK_REAR_ALSHUB
+	bool "MTK REAR ALSHUB Config"
+	help
+	  It support different rear alshub sensor.
+	  If this option is set,
+	  it will support
+	  sensorhub rear als.

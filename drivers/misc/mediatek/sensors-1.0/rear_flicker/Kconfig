@@ -1,0 +1,10 @@
+
+config CUSTOM_KERNEL_REAR_FLICKER
+	bool "CUSTOM KERNEL SENSOR REAR FLICKER config"
+	help
+	one load to support different rear_flicker sensor.
+	This feature Option is used for projects which using
+	rear_flicker, and be auto detected by setting this option to yes
+	If unsure, say N.
+
+source "drivers/misc/mediatek/sensors-1.0/rear_flicker/rear_flickerhub/Kconfig"

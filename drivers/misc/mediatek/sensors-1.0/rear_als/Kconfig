@@ -1,0 +1,10 @@
+
+config CUSTOM_KERNEL_REAR_ALS
+	bool "CUSTOM KERNEL REAR ALS Config"
+	help
+	  one load to support different rear_als sensor.
+	  This feature Option is used for projects which using more than one
+	  rear_als, and be auto detected by setting this option to yes
+	  If unsure, say N.
+
+source "drivers/misc/mediatek/sensors-1.0/rear_als/rear_alshub/Kconfig"

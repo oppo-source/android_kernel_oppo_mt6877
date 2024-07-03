@@ -24,6 +24,9 @@ struct mt6360_chg_platform_data {
 	u32 aicc_once;
 	u32 post_aicc;
 	u32 batoc_notify;
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	u32 pp_sense_l;
+#endif
 	const char *chg_name;
 };
 
@@ -101,6 +104,10 @@ struct mt6360_chg_platform_data {
 #define MT6360_MASK_DCDTOUTEN	BIT(6)
 #define MT6360_SHFT_DCDTOUTEN	6
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+#define MT6360_MASK_DCD_TIMEOUT         (0x30)
+#define MT6360_SHIFT_DCD_TIMEOUT        4
+#endif
 /* MT6360_PMU_USB_STATUS1 : 0x27 */
 #define MT6360_MASK_USB_STATUS	(0x70)
 #define MT6360_SHFT_USB_STATUS	(4)
@@ -128,6 +135,13 @@ struct mt6360_chg_platform_data {
 #define MT6360_MASK_VCLAMP	(0x7)
 #define MT6360_SHFT_VCLAMP	(0)
 #define MT6360_VCLAMP_MAXVAL	(0x07)
+
+#ifdef OPLUS_FEATURE_CHG_BASIC
+/*HW.BASIC.CHG, KONG, 2023.7.17*/
+/* MT6360_PMU_CHRDET_CTRL1 : 0x2D */
+#define MT6360_MASK_CHG_VBUS_OVP_VTHSEL	(0x0F)
+#define MT6360_SHFT_CHG_VBUS_OVP_VTHSEL	(0)
+#endif
 
 /* MT6360_PMU_CHG_HIDDEN_CTRL2 : 0x31 */
 #define MT6360_MASK_EOC_RST	BIT(7)
@@ -164,9 +178,17 @@ struct mt6360_chg_platform_data {
 #define MT6360_MASK_ISTDET	0x1C
 #define MT6360_SHFT_ISTDET	2
 
+#define MT6360_MASK_ISPERIOD	0x03
+#define MT6360_SHFT_ISPERIOD	0
+
 /* MT6360_PMU_USBID_CTRL2 : 0x6E */
 #define MT6360_MASK_IDTD	0xE0
 #define MT6360_MASK_USBID_FLOAT	BIT(1)
+#define MT6360_MASK_USBID_FONEN	BIT(0)
+
+/* MT6360_PMU_USBID_CTRL3 : 0x6F */
+#define MT6360_MASK_IDPREGVOL	BIT(7)
+#define MT6360_MASK_IDVTHSEL	BIT(6)
 
 /* MT6360_PMU_FLED_EN : 0x7E */
 #define MT6360_MASK_STROBE_EN	BIT(2)
@@ -181,5 +203,8 @@ struct mt6360_chg_platform_data {
 
 /* MT6360_PMU_CHG_STAT4 : 0xE3 */
 #define MT6360_MASK_CHG_TMRI	BIT(3)
+
+/* MT6360_PMU_BASE_STAT : 0xE8 */
+#define MT6360_MASK_USBID_STAT	BIT(0)
 
 #endif /* __MT6360_PMU_CHG_H */

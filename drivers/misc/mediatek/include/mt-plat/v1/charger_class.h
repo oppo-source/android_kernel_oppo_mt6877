@@ -162,6 +162,10 @@ struct charger_ops {
 	int (*enable_usbid)(struct charger_device *dev, bool en);
 	int (*set_usbid_rup)(struct charger_device *dev, u32 rup);
 	int (*set_usbid_src_ton)(struct charger_device *dev, u32 src_ton);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	int (*set_usbid_period)(struct charger_device *dev, u32 period);
+	int (*get_usbid_stat)(struct charger_device *dev, u8 *status);
+#endif
 	int (*enable_usbid_floating)(struct charger_device *dev, bool en);
 	int (*enable_force_typec_otp)(struct charger_device *dev, bool en);
 	int (*enable_hidden_mode)(struct charger_device *dev, bool en);
@@ -331,8 +335,13 @@ extern int charger_dev_enable_usbid(struct charger_device *dev, bool en);
 extern int charger_dev_set_usbid_rup(struct charger_device *dev, u32 rup);
 extern int charger_dev_set_usbid_src_ton(struct charger_device *dev,
 					 u32 src_ton);
+#ifdef OPLUS_FEATURE_CHG_BASIC
+extern int charger_dev_set_usbid_period(struct charger_device *dev,
+					 u32 period);
+extern int charger_dev_get_usbid_stat(struct charger_device *dev, u8 *status);
+#endif
 extern int charger_dev_enable_usbid_floating(struct charger_device *dev,
-					     bool en);
+						bool en);
 extern int charger_dev_enable_force_typec_otp(struct charger_device *dev,
 					      bool en);
 extern int charger_dev_get_ctd_dischg_status(struct charger_device *dev,

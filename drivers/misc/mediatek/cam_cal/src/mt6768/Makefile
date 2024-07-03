@@ -21,6 +21,7 @@ subdir-ccflags-y += -I$(srctree)/drivers/i2c/busses/
 # Common code
 obj-y += ../common/$(COMMON_VERSION)/eeprom_driver.o
 obj-y += ../common/$(COMMON_VERSION)/eeprom_i2c_common_driver.o
+obj-y += otp_insensor_dev.o
 
 # Platform code
 obj-y += eeprom_i2c_custom_driver.o

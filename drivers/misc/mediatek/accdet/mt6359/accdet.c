@@ -40,6 +40,12 @@
 #endif
 #include "pmic_auxadc.h"
 #endif /* end of #if PMIC_ACCDET_KERNEL */
+#ifdef CONFIG_SND_SOC_FSA
+#include "../../../../../sound/soc/codecs/audio/fsa44xx/fsa4480-i2c.h"
+#endif /* CONFIG_SND_SOC_FSA */
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+#include "../../../../../sound/soc/codecs/audio/oplus_discrete_typec_switch/oplus_discrete_typec_switch.h"
+#endif
 
 /********************grobal variable definitions******************/
 #if PMIC_ACCDET_CTP
@@ -131,6 +137,14 @@ static struct workqueue_struct *accdet_workqueue;
 static struct work_struct eint_work;
 static struct workqueue_struct *eint_workqueue;
 
+#ifdef OPLUS_BUG_COMPATIBILITY
+struct delayed_work hp_detect_work;
+#ifdef CONFIG_HSKEY_BLOCK
+struct delayed_work hskey_block_work;
+bool g_hskey_block_flag;
+#endif /* CONFIG_HSKEY_BLOCK */
+#endif /* OPLUS_BUG_COMPATIBILITY */
+
 /* micbias_timer: disable micbias if no accdet irq after eint,
  * timeout: 6 seconds
  * timerHandler: dis_micbias_timerhandler()
@@ -208,6 +222,18 @@ static bool debug_thread_en;
 static bool dump_reg;
 static struct task_struct *thread;
 
+#ifdef CONFIG_SND_SOC_FSA
+static bool b_mic_ground_switch = false;
+extern int fsa4480_switch_event(struct device_node *node, enum fsa_function event);
+#endif /* CONFIG_SND_SOC_FSA */
+
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+extern int oplus_discrete_typec_switch_hs_event(enum audio_switch_hs_event event);
+extern int oplus_discrete_typec_switch_get_mic_gnd_status(void);
+static bool g_headphone_event;
+static bool g_accdet_interrupt;
+struct delayed_work headphone_event_work;
+#endif
 /*******************local function declaration******************/
 #ifdef CONFIG_ACCDET_EINT_IRQ
 static u32 config_moisture_detect_1_0(void);
@@ -1031,6 +1057,23 @@ static u32 key_check(u32 v)
 #if PMIC_ACCDET_KERNEL
 static void send_key_event(u32 keycode, u32 flag)
 {
+#ifdef OPLUS_BUG_COMPATIBILITY
+#ifdef CONFIG_HSKEY_BLOCK
+	pr_info("[accdet][send_key_event]g_hskey_block_flag = %d\n", g_hskey_block_flag);
+	if (g_hskey_block_flag) {
+		pr_info("[accdet][send_key_event]No key event in 1s after inserting 4-pole headsets\n");
+		return;
+	}
+#endif /* CONFIG_HSKEY_BLOCK */
+	pr_info("[accdet][send_key_event]eint_accdet_sync_flag = %d, cur_eint_state = %d\n",
+		eint_accdet_sync_flag, cur_eint_state);
+	if (((eint_accdet_sync_flag && (cur_eint_state == EINT_PIN_PLUG_OUT))
+		|| (!eint_accdet_sync_flag))
+		&& (keycode == MD_KEY)) {
+		pr_info("[accdet][send_key_event]No hook key release when plugging out\n");
+		return;
+	}
+#endif /* OPLUS_BUG_COMPATIBILITY */
 	switch (keycode) {
 	case DW_KEY:
 		input_report_key(accdet_input_dev, KEY_VOLUMEDOWN, flag);
@@ -1057,8 +1100,80 @@ static void send_key_event(u32 keycode, u32 flag)
 
 static void send_accdet_status_event(u32 cable_type, u32 status)
 {
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+	int mic_gnd_status = 0;
+#endif
 	switch (cable_type) {
 	case HEADSET_NO_MIC:
+#ifdef CONFIG_SND_SOC_FSA
+		if (status == 1) {
+			fsa4480_switch_event(NULL, 0);
+			b_mic_ground_switch = true;
+			pr_info("fsa4480_switch_event  mic and ground switch\n");
+		}
+#endif /* CONFIG_SND_SOC_FSA */
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+		if (accdet_dts.hs_det_discrete == 1) {
+			mic_gnd_status = oplus_discrete_typec_switch_get_mic_gnd_status();
+			if (status) {
+				if (mic_gnd_status == 0) {
+					oplus_discrete_typec_switch_hs_event(HS_MIC_GND_SWAP);
+					schedule_delayed_work(&headphone_event_work, msecs_to_jiffies(500));
+					g_accdet_interrupt = false;
+					pr_info("%s  mic_gnd_status =%d schedule_delayed_work g_accdet_interrupt = %d\n", __func__, oplus_discrete_typec_switch_get_mic_gnd_status(), g_accdet_interrupt);
+				} else { //if mic_gnd_status = 1,3-pole plug-in is reported.
+					if (g_headphone_event == false) {
+						pr_info("%s  mic_gnd_status = %d plugin\n", __func__,mic_gnd_status);
+						oplus_discrete_typec_switch_hs_event(HS_LR_CONNECT);
+						input_report_switch(accdet_input_dev, SW_HEADPHONE_INSERT,
+							status);
+						/* when plug 4-pole out, if both AB=3 AB=0 happen,3-pole plug
+						* in will be incorrectly reported, then 3-pole plug-out is
+						* reported,if no mantory 4-pole plug-out, icon would be
+						* visible.
+						*/
+						input_sync(accdet_input_dev);
+						g_headphone_event = true;
+						pr_info("%s HEADPHONE(3-pole) %s\n", __func__,
+							status ? "PlugIn" : "PlugOut");
+					}
+				}
+				pr_info("%s HEADPHONE(3-pole) mic_gnd_status = %d \n", __func__, oplus_discrete_typec_switch_get_mic_gnd_status());
+			} else {
+				pr_info("%s 3-pole plugout\n", __func__);
+				oplus_discrete_typec_switch_hs_event(HS_PLUG_OUT);
+				input_report_switch(accdet_input_dev, SW_HEADPHONE_INSERT,
+					status);
+				/* when plug 4-pole out, if both AB=3 AB=0 happen,3-pole plug
+				* in will be incorrectly reported, then 3-pole plug-out is
+				* reported,if no mantory 4-pole plug-out, icon would be
+				* visible.
+				*/
+				input_report_switch(accdet_input_dev,
+					SW_MICROPHONE_INSERT, status);
+				input_sync(accdet_input_dev);
+				cancel_delayed_work_sync(&headphone_event_work);
+				g_headphone_event = false;
+				g_accdet_interrupt = false;
+				pr_info("%s HEADPHONE(3-pole) %s\n", __func__,
+					status ? "PlugIn" : "PlugOut");
+			}
+		} else {
+			input_report_switch(accdet_input_dev, SW_HEADPHONE_INSERT,
+				status);
+			/* when plug 4-pole out, if both AB=3 AB=0 happen,3-pole plug
+			 * in will be incorrectly reported, then 3-pole plug-out is
+			 * reported,if no mantory 4-pole plug-out, icon would be
+			 * visible.
+			 */
+			if (status == 0)
+				input_report_switch(accdet_input_dev,
+					SW_MICROPHONE_INSERT, status);
+			input_sync(accdet_input_dev);
+			pr_info("%s HEADPHONE(3-pole) %s\n", __func__,
+				status ? "PlugIn" : "PlugOut");
+		}
+#else
 		input_report_switch(accdet_input_dev, SW_HEADPHONE_INSERT,
 			status);
 		/* when plug 4-pole out, if both AB=3 AB=0 happen,3-pole plug
@@ -1072,11 +1187,24 @@ static void send_accdet_status_event(u32 cable_type, u32 status)
 		input_sync(accdet_input_dev);
 		pr_info("%s HEADPHONE(3-pole) %s\n", __func__,
 			status ? "PlugIn" : "PlugOut");
+#endif
 		break;
 	case HEADSET_MIC:
 		/* when plug 4-pole out, 3-pole plug out should also be
 		 * reported for slow plug-in case
 		 */
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+		if (accdet_dts.hs_det_discrete == 1) {
+			if (status) {
+				oplus_discrete_typec_switch_hs_event(HS_LR_CONNECT);
+			} else {
+				oplus_discrete_typec_switch_hs_event(HS_PLUG_OUT);
+				if (mic_gnd_status) {
+					cancel_delayed_work_sync(&headphone_event_work);
+				}
+			}
+		}
+#endif
 		if (status == 0)
 			input_report_switch(accdet_input_dev,
 				SW_HEADPHONE_INSERT, status);
@@ -1781,10 +1909,21 @@ static void dis_micbias_timerhandler(struct timer_list *t)
 static void dis_micbias_work_callback(struct work_struct *work)
 {
 	u32 cur_AB, eintID;
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
 
 	/* check EINT0 status, if plug out,
 	 * not need to disable accdet here
 	 */
+	if (accdet_dts.hs_det_discrete == 0) {
+		eintID = pmic_read_mbit(PMIC_ACCDET_EINT0_MEM_IN_ADDR,
+			PMIC_ACCDET_EINT0_MEM_IN_SHIFT,
+			PMIC_ACCDET_EINT0_MEM_IN_MASK);
+		if (eintID == M_PLUG_OUT) {
+			pr_info("%s Plug-out, no dis micbias\n", __func__);
+			return;
+		}
+	}
+#else
 	eintID = pmic_read_mbit(PMIC_ACCDET_EINT0_MEM_IN_ADDR,
 		PMIC_ACCDET_EINT0_MEM_IN_SHIFT,
 		PMIC_ACCDET_EINT0_MEM_IN_MASK);
@@ -1792,6 +1931,7 @@ static void dis_micbias_work_callback(struct work_struct *work)
 		pr_info("%s Plug-out, no dis micbias\n", __func__);
 		return;
 	}
+#endif
 	/* if modify_vref_volt called, not need to dis micbias again */
 	if (dis_micbias_done == true) {
 		pr_info("%s modify_vref_volt called\n", __func__);
@@ -1816,6 +1956,13 @@ cur_AB = pmic_read(PMIC_ACCDET_MEM_IN_ADDR) >> ACCDET_STATE_MEM_IN_OFFSET;
 		pmic_write_clr(PMIC_ACCDET_SW_EN_ADDR,
 			PMIC_ACCDET_SW_EN_SHIFT);
 		disable_accdet();
+#ifdef CONFIG_SND_SOC_FSA
+		if (b_mic_ground_switch) {
+			fsa4480_switch_event(NULL, 0);
+			b_mic_ground_switch = false;
+			pr_info("fsa4480_switch_event  mic and ground switch back\n");
+		}
+#endif /* CONFIG_SND_SOC_FSA */
 	pr_info("%s more than 6s,MICBIAS:Disabled AB:0x%x c_type:0x%x\n",
 		__func__, cur_AB, cable_type);
 	}
@@ -1854,7 +2001,11 @@ static void eint_work_callback(void)
 		eint_accdet_sync_flag = false;
 		accdet_thing_in_flag = false;
 		mutex_unlock(&accdet_eint_irq_sync_mutex);
+#ifndef OPLUS_BUG_COMPATIBILITY
+		 //modified for waiting for 6s before disabling micbias,
+		 //delete timer when plug out 3-pole headset
 		if (accdet_dts.moisture_detect_mode != 0x5)
+#endif /* OPLUS_BUG_COMPATIBILITY */
 			del_timer_sync(&micbias_timer);
 
 		/* disable accdet_sw_en=0
@@ -2112,10 +2263,49 @@ static void accdet_work_callback(void)
 		pmic_write(PMIC_RG_LDO_VUSB_HW0_OP_EN_ADDR, 0x8005);
 		pr_info("%s VUSB LP en\n", __func__);
 	}
-
 	pr_info("%s() report cable_type done\n", __func__);
 	__pm_relax(accdet_irq_lock);
 }
+
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+static bool check_cable_type_headphone(void)
+{
+	u32 cur_AB;
+	pr_info("%s()",__func__);
+	cur_AB = pmic_read(PMIC_ACCDET_MEM_IN_ADDR) >> ACCDET_STATE_MEM_IN_OFFSET;
+	cur_AB = cur_AB & ACCDET_STATE_AB_MASK;
+	pr_info("accdet %s(), cur_status:%s current AB = %d\n", __func__,
+		     accdet_status_str[accdet_status], cur_AB);
+	if ((cable_type == HEADSET_NO_MIC) || (cur_AB == ACCDET_STATE_AB_00)) {
+		pr_info("%s() true done",__func__);
+		return true;
+	}
+	pr_info("%s() false done",__func__);
+	return false;
+}
+static void headphone_work_callback(struct work_struct *work)
+{
+	bool is_headphone = false;
+	pr_info("%s()",__func__);
+	if (g_accdet_interrupt) {
+		g_accdet_interrupt = false;
+		pr_info("%s() g_accdet_interrupt = %d",__func__, g_accdet_interrupt);
+		return;
+	}
+	__pm_stay_awake(accdet_irq_lock);
+	is_headphone = check_cable_type_headphone();
+	mutex_lock(&accdet_eint_irq_sync_mutex);
+	if (eint_accdet_sync_flag && is_headphone) {
+			send_accdet_status_event(cable_type, 1);
+	} else {
+		pr_info("%s() Headset has been plugout or 4-pole microphone\n",
+			__func__);
+	}
+	mutex_unlock(&accdet_eint_irq_sync_mutex);
+	pr_info("%s() report cable_type done\n", __func__);
+	__pm_relax(accdet_irq_lock);
+}
+#endif
 
 static void accdet_queue_work(void)
 {
@@ -2147,7 +2337,13 @@ static int pmic_eint_queue_work(int eintID)
 			__func__);
 		cur_eint_state = EINT_PIN_PLUG_OUT;
 #if PMIC_ACCDET_KERNEL
+#ifdef OPLUS_BUG_COMPATIBILITY
+		pr_info("%s water in no delayed work scheduled when plugging out\n", __func__);
+		cancel_delayed_work_sync(&hp_detect_work);
+		schedule_delayed_work(&hp_detect_work, 0);
+#else /* OPLUS_BUG_COMPATIBILITY */
 		ret = queue_work(eint_workqueue, &eint_work);
+#endif /* OPLUS_BUG_COMPATIBILITY */
 #else
 		eint_work_callback();
 #endif /* end of #if PMIC_ACCDET_KERNEL */
@@ -2162,15 +2358,43 @@ static int pmic_eint_queue_work(int eintID)
 		} else {
 			if (gmoistureID != M_PLUG_OUT) {
 				cur_eint_state = EINT_PIN_PLUG_IN;
-
+#ifdef OPLUS_BUG_COMPATIBILITY
+				pr_info("%s delay work to disable micbias after 6s\n", __func__);
+				mod_timer(&micbias_timer,
+					jiffies + MICBIAS_DISABLE_TIMER);
+#else /* OPLUS_BUG_COMPATIBILITY */
 				if (accdet_dts.moisture_detect_mode != 0x5) {
 					mod_timer(&micbias_timer,
 					jiffies + MICBIAS_DISABLE_TIMER);
 				}
+#endif /* OPLUS_BUG_COMPATIBILITY */
 			}
 		}
 #if PMIC_ACCDET_KERNEL
+#ifdef OPLUS_BUG_COMPATIBILITY
+		if (cur_eint_state == EINT_PIN_PLUG_IN) {
+#ifdef CONFIG_HSKEY_BLOCK
+			g_hskey_block_flag = true;
+			schedule_delayed_work(&hskey_block_work, msecs_to_jiffies(1500));
+#endif /* CONFIG_HSKEY_BLOCK */
+#ifdef CONFIG_SND_SOC_FSA
+			pr_info("%s delayed work 50ms scheduled when plugging in\n", __func__);
+			schedule_delayed_work(&hp_detect_work, msecs_to_jiffies(50));
+#else
+			pr_info("%s delayed work 500ms scheduled when plugging in\n", __func__);
+			schedule_delayed_work(&hp_detect_work, msecs_to_jiffies(500));
+#endif
+		} else {
+#ifdef CONFIG_HSKEY_BLOCK
+			cancel_delayed_work_sync(&hskey_block_work);
+#endif /* CONFIG_HSKEY_BLOCK */
+			pr_info("%s no delayed work scheduled when plugging out\n", __func__);
+			cancel_delayed_work_sync(&hp_detect_work);
+			schedule_delayed_work(&hp_detect_work, 0);
+		}
+#else /* OPLUS_BUG_COMPATIBILITY */
 		ret = queue_work(eint_workqueue, &eint_work);
+#endif /* OPLUS_BUG_COMPATIBILITY */
 #else
 		eint_work_callback();
 #endif /* end of #if PMIC_ACCDET_KERNEL */
@@ -2375,6 +2599,12 @@ void accdet_irq_handle(void)
 	eint_sts = pmic_read(PMIC_ACCDET_EINT0_MEM_IN_ADDR);
 
 	if ((irq_status & ACCDET_IRQ_B0) && (eintID == 0)) {
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+		if (accdet_dts.hs_det_discrete == 1) {
+			g_accdet_interrupt = true;
+			pr_info("g_accdet_interrupt = true", g_accdet_interrupt);
+		}
+#endif
 		clear_accdet_int();
 		accdet_queue_work();
 		clear_accdet_int_check();
@@ -2430,6 +2660,47 @@ static void accdet_eint_handler(void)
 	pr_info("%s() exit\n", __func__);
 }
 #endif
+
+#ifdef CONFIG_HSKEY_BLOCK
+static void disable_hskey_block_callback(struct work_struct *work)
+{
+	pr_info("[accdet][disable_hskey_block_callback]:\n");
+	g_hskey_block_flag = false;
+}
+#endif /* CONFIG_HSKEY_BLOCK */
+
+//#ifdef OPLUS_ARCH_EXTENDS
+/*2023/02/27, add for type-c headphone detect bypass*/
+int fsa_ex_eint_handler(void)
+{
+	int ret = 0;
+	pr_notice("Error: %s called\n",
+			__func__);
+
+	if (cur_eint_state == EINT_PIN_PLUG_IN) {
+		/* To trigger EINT when the headset was plugged in
+		 * We set the polarity back as we initialed.
+		 */
+		cur_eint_state = EINT_PIN_PLUG_OUT;
+	} else {
+		/* To trigger EINT when the headset was plugged out
+		 * We set the opposite polarity to what we initialed.
+		 */
+
+		cur_eint_state = EINT_PIN_PLUG_IN;
+
+		if (accdet_dts.moisture_detect_mode != 0x5) {
+			mod_timer(&micbias_timer,
+				jiffies + MICBIAS_DISABLE_TIMER);
+		}
+
+	}
+
+	ret = queue_work(eint_workqueue, &eint_work);
+	return IRQ_HANDLED;
+}
+EXPORT_SYMBOL(fsa_ex_eint_handler);
+//#endif
 
 #ifdef CONFIG_ACCDET_EINT
 static irqreturn_t ex_eint_handler(int irq, void *data)
@@ -3082,8 +3353,13 @@ static void accdet_init_once(void)
 		pmic_write(PMIC_RG_AUDACCDETMICBIAS0PULLLOW_ADDR,
 			reg | RG_ACCDET_MODE_ANA11_MODE2);
 		/* enable analog fast discharge */
+#ifdef OPLUS_ARCH_EXTENDS
+		pmic_write_mset(PMIC_RG_ANALOGFDEN_ADDR,
+			PMIC_RG_ANALOGFDEN_SHIFT, 0x3, 0x2);
+#else
 		pmic_write_mset(PMIC_RG_ANALOGFDEN_ADDR,
 			PMIC_RG_ANALOGFDEN_SHIFT, 0x3, 0x3);
+#endif
 	} else if (accdet_dts.mic_mode == HEADSET_MODE_6) {
 		/* DCC mode Low cost mode with internal bias,
 		 * bit8 = 1 to use internal bias
@@ -3124,6 +3400,14 @@ static void accdet_init_once(void)
 	pmic_write(PMIC_ACCDET_DA_STABLE_ADDR, 0x1);
 	/* disable eint/inverter/sw_en */
 	pmic_write(PMIC_ACCDET_SW_EN_ADDR, 0x0);
+#endif
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+	if (accdet_dts.hs_det_discrete == 1) {
+		pr_info("discrete switch disable eint0");
+		pmic_write_clr(PMIC_ACCDET_EINT0_SW_EN_ADDR, PMIC_ACCDET_EINT0_SW_EN_SHIFT);
+		pmic_write_clr(PMIC_ACCDET_EINT0_INVERTER_SW_EN_ADDR,
+						PMIC_ACCDET_EINT0_INVERTER_SW_EN_SHIFT);
+	}
 #endif
 	pr_info("%s() done.\n", __func__);
 #if PMIC_ACCDET_DEBUG
@@ -3203,9 +3487,14 @@ void accdet_modify_vref_volt(void)
 
 static void accdet_modify_vref_volt_self(void)
 {
+	int error_hw;
+	struct device_node *node = NULL;
+#ifndef OPLUS_BUG_COMPATIBILITY
 	u32 cur_AB, eintID;
+#endif /* OPLUS_BUG_COMPATIBILITY */
 
 	if (accdet_dts.moisture_detect_mode == 0x5) {
+#ifndef OPLUS_BUG_COMPATIBILITY
 		/* make sure seq is disable micbias then connect vref2 */
 
 		/* check EINT0 status, if plug out,
@@ -3240,12 +3529,25 @@ static void accdet_modify_vref_volt_self(void)
 				__func__, cur_AB, cable_type);
 			dis_micbias_done = true;
 		}
+#endif /* OPLUS_BUG_COMPATIBILITY */
 		/* disable comp1 delay window */
 		pmic_write_set(PMIC_RG_EINT0NOHYS_ADDR,
 			PMIC_RG_EINT0NOHYS_SHIFT);
 		/* connect VREF2 to EINT0CMP */
 		pmic_write_mset(PMIC_RG_EINTCOMPVTH_ADDR,
 			PMIC_RG_EINTCOMPVTH_SHIFT, 0x3, 0x3);
+		node = of_find_matching_node(node, accdet_of_match);
+		if(!node){
+			pr_notice("accdet %s can't find compatible node\n", __func__);
+		}else{
+			if (0==of_property_read_u32(node, "moisture_disable_error_switch", &error_hw))
+			{
+		       		/* connect VREF2 to EINT0CMP */
+				pr_info("%s accdet LYU VREF2", __func__);
+				pmic_write_mset(PMIC_RG_EINTCOMPVTH_ADDR,
+					PMIC_RG_EINTCOMPVTH_SHIFT, 0x3, 0x2);
+			}
+		}
 		pr_info("%s [0x%x]=0x%x [0x%x]=0x%x\n", __func__,
 			PMIC_RG_EINT0NOHYS_ADDR,
 			pmic_read(PMIC_RG_EINT0NOHYS_ADDR),
@@ -3275,7 +3577,9 @@ int mt_accdet_probe(struct platform_device *dev)
 {
 	int ret;
 	struct platform_driver accdet_driver_hal = accdet_driver_func();
-
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+	struct device_node *node = NULL;
+#endif
 	pr_info("%s() begin!\n", __func__);
 
 	/* get pmic accdet auxadc iio channel handler */
@@ -3324,7 +3628,19 @@ int mt_accdet_probe(struct platform_device *dev)
 		pr_notice("%s device_create fail.\n", __func__);
 		goto err_device_create;
 	}
-
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+	node = of_find_matching_node(node, accdet_of_match);
+	if (!node) {
+		pr_notice("%s can't find compatible dts node\n", __func__);
+		return -1;
+	}
+	ret = of_property_read_u32(node, "hs-det-discrete",
+		&accdet_dts.hs_det_discrete);
+	if (ret) {
+		/* no moisture detection */
+		accdet_dts.hs_det_discrete= 0;
+	}
+#endif
 	/* Create input device*/
 	accdet_input_dev = input_allocate_device();
 	if (!accdet_input_dev) {
@@ -3421,6 +3737,18 @@ int mt_accdet_probe(struct platform_device *dev)
 		pr_notice("%s create eint workqueue fail.\n", __func__);
 		goto err_create_workqueue;
 	}
+#ifdef CONFIG_SND_SOC_OPLUS_DISCRETE_TYPEC_SWITCH
+	if (accdet_dts.hs_det_discrete == 1) {
+		INIT_DELAYED_WORK(&headphone_event_work, headphone_work_callback);
+	}
+#endif
+
+#ifdef OPLUS_BUG_COMPATIBILITY
+	INIT_DELAYED_WORK(&hp_detect_work, eint_work_callback);
+#ifdef CONFIG_HSKEY_BLOCK
+	INIT_DELAYED_WORK(&hskey_block_work, disable_hskey_block_callback);
+#endif /* CONFIG_HSKEY_BLOCK */
+#endif /* OPLUS_BUG_COMPATIBILITY */
 
 #ifdef CONFIG_ACCDET_EINT
 	ret = ext_eint_setup(dev);

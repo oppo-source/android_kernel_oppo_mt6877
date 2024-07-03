@@ -1,0 +1,8 @@
+
+config MTK_REAR_FLICKERHUB
+	bool "MTK REAR FLICKERHUB Config"
+	help
+	  It support rear flickerhub sensor.
+	  If this option is set,
+	  it will support
+	  sensorhub rear flicker.
