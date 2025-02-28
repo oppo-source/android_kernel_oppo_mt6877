@@ -22,6 +22,7 @@
   d_drop
   dentry_open
   dev_get_by_index_rcu
+  contpte_ptep_test_and_clear_young
   device_create_bin_file
   device_remove_bin_file
   devres_destroy
@@ -292,6 +293,7 @@
   __traceiter_android_vh_rwsem_opt_spin_start
   __traceiter_android_vh_save_track_hash
   __traceiter_android_vh_save_vmalloc_stack
+  __traceiter_android_vh_rtmutex_wait_start
   __traceiter_android_vh_sched_move_task
   __traceiter_android_rvh_sched_setaffinity
   __traceiter_android_vh_sched_setaffinity_early
@@ -383,6 +385,11 @@
   __tracepoint_android_rvh_enqueue_entity
   __tracepoint_android_vh_exit_check
   __tracepoint_android_vh_exit_signal
+  __tracepoint_android_vh_meminfo_proc_show
+  __tracepoint_android_vh_exit_mm
+  __tracepoint_android_vh_show_mem
+  __tracepoint_android_vh_print_slabinfo_header
+  __tracepoint_android_vh_cache_show
   __tracepoint_android_vh_exit_signal_whether_wake
   __tracepoint_android_vh_free_oem_binder_struct
   __tracepoint_android_vh_free_unref_page_bypass
@@ -438,6 +445,7 @@
   __tracepoint_android_vh_read_lazy_flag
   __tracepoint_android_vh_save_track_hash
   __tracepoint_android_vh_save_vmalloc_stack
+  __tracepoint_android_vh_rtmutex_wait_start
   __tracepoint_android_vh_sched_move_task
   __tracepoint_android_rvh_sched_setaffinity
   __tracepoint_android_vh_set_tsk_need_resched_lazy
@@ -508,7 +516,19 @@
   wait_for_completion_killable_timeout
   wakeup_source_remove
   wake_up_state
+  __traceiter_android_vh_meminfo_proc_show
+  __traceiter_android_vh_exit_mm
+  __traceiter_android_vh_show_mem
+  __traceiter_android_vh_print_slabinfo_header
+  __traceiter_android_vh_cache_show
   wq_worker_comm
   xt_register_match
   xt_unregister_match
+  stack_depot_fetch
+  get_slabinfo
+  vmalloc_nr_pages
+  on_each_cpu_cond_mask
+  memcg_kmem_online_key
+  stack_depot_print
   zero_pfn
+  try_to_del_timer_sync

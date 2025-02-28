@@ -40,6 +40,34 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/f2fs.h>
 
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+#include <linux/of.h>
+static const char *compress_dedup_switch = NULL;
+
+#define COMPRESS_DEDUP_CONFIG_PATH "/soc/oplus,f2fs/compress_dedup"
+static void update_compress_dedup_switch(void)
+{
+	struct device_node *np = of_find_node_by_path(COMPRESS_DEDUP_CONFIG_PATH);
+	if (np) {
+		of_property_read_string(np, "switch", &compress_dedup_switch);
+	}
+}
+
+bool compress_dedup_enabled(void)
+{
+	return compress_dedup_switch != NULL;
+}
+
+static bool is_data_partition(struct f2fs_sb_info *sbi)
+{
+	uint64_t min_data_partition_blocks = 0x800000; // 32GB
+
+	if (le64_to_cpu(sbi->raw_super->block_count) > min_data_partition_blocks)
+		return true;
+	return false;
+}
+#endif
+
 static struct kmem_cache *f2fs_inode_cachep;
 
 #ifdef CONFIG_F2FS_FAULT_INJECTION
@@ -65,10 +93,22 @@ const char *f2fs_fault_name[FAULT_MAX] = {
 	[FAULT_BLKADDR_VALIDITY]	= "invalid blkaddr",
 	[FAULT_BLKADDR_CONSISTENCE]	= "inconsistent blkaddr",
 	[FAULT_NO_SEGMENT]		= "no free segment",
+	[FAULT_COMPRESS_REDIRTY] = "compress ioc redirty",
+	[FAULT_COMPRESS_WRITEBACK] = "compress ioc writeback",
+	[FAULT_COMPRESS_RESERVE_NOSPC] = "compress reserve nospc",
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	[FAULT_COMPRESS_VMAP] = "compress vmap",
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	[FAULT_COMPRESS_INIT_CTX] = "compress init ctx",
+	[FAULT_COMPRESS_PAGE_ARRAY] = "compress page array",
+	[FAULT_COMPRESS_LOW_RATIO] = "compress low ratio",
+	[FAULT_COMPRESS_GET_DNODE] = "compress get dnode",
+#endif
+#endif
 };
 
 int f2fs_build_fault_attr(struct f2fs_sb_info *sbi, unsigned long rate,
-							unsigned long type)
+							unsigned long long type)
 {
 	struct f2fs_fault_info *ffi = &F2FS_OPTION(sbi).fault_info;
 
@@ -80,16 +120,16 @@ int f2fs_build_fault_attr(struct f2fs_sb_info *sbi, unsigned long rate,
 	}
 
 	if (type) {
-		if (type >= BIT(FAULT_MAX))
+		if (type >= 1ULL << FAULT_MAX)
 			return -EINVAL;
-		ffi->inject_type = (unsigned int)type;
+		ffi->inject_type = type;
 	}
 
 	if (!rate && !type)
 		memset(ffi, 0, sizeof(struct f2fs_fault_info));
 	else
 		f2fs_info(sbi,
-			"build fault injection attr: rate: %lu, type: 0x%lx",
+			"build fault injection attr: rate: %lu, type: 0x%llx",
 								rate, type);
 	return 0;
 }
@@ -170,6 +210,7 @@ enum {
 	Opt_compress_chksum,
 	Opt_compress_mode,
 	Opt_compress_cache,
+	Opt_compress_layout,
 	Opt_atgc,
 	Opt_gc_merge,
 	Opt_nogc_merge,
@@ -249,6 +290,7 @@ static match_table_t f2fs_tokens = {
 	{Opt_compress_chksum, "compress_chksum"},
 	{Opt_compress_mode, "compress_mode=%s"},
 	{Opt_compress_cache, "compress_cache"},
+	{Opt_compress_layout, "compress_layout=%s"},
 	{Opt_atgc, "atgc"},
 	{Opt_gc_merge, "gc_merge"},
 	{Opt_nogc_merge, "nogc_merge"},
@@ -669,6 +711,9 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 #endif
 	char *p, *name;
 	int arg = 0;
+#ifdef CONFIG_F2FS_FAULT_INJECTION
+	unsigned long long larg;
+#endif
 	kuid_t uid;
 	kgid_t gid;
 	int ret;
@@ -889,9 +934,9 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 			break;
 
 		case Opt_fault_type:
-			if (args->from && match_int(args, &arg))
+			if (args->from && match_u64(args, &larg))
 				return -EINVAL;
-			if (f2fs_build_fault_attr(sbi, 0, arg))
+			if (f2fs_build_fault_attr(sbi, 0, larg))
 				return -EINVAL;
 			set_opt(sbi, FAULT_INJECTION);
 			break;
@@ -1108,6 +1153,15 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 				kfree(name);
 				return -EINVAL;
 			}
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+			if (F2FS_OPTION(sbi).compress_layout == COMPRESS_FIXED_OUTPUT &&
+			    (F2FS_OPTION(sbi).compress_algorithm != COMPRESS_LZ4 ||
+			     F2FS_OPTION(sbi).compress_level != 0)) {
+				f2fs_err(sbi, "fixed-output compress layout can only work on lz4");
+				kfree(name);
+				return -EINVAL;
+			}
+#endif
 			kfree(name);
 			break;
 		case Opt_compress_log_size:
@@ -1215,6 +1269,32 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 			}
 			set_opt(sbi, COMPRESS_CACHE);
 			break;
+		case Opt_compress_layout:
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+			if (!f2fs_sb_has_compression(sbi)) {
+				f2fs_info(sbi, "Image doesn't support compression");
+				break;
+			}
+			name = match_strdup(&args[0]);
+			/* fix coverity error: Dereference null return value name*/
+			if (name && !strcmp(name, "fixed-input")) {
+				F2FS_OPTION(sbi).compress_layout = COMPRESS_FIXED_INPUT;
+			} else if (name && !strcmp(name, "fixed-output")) {
+				if (F2FS_OPTION(sbi).compress_algorithm != COMPRESS_LZ4 ||
+				    F2FS_OPTION(sbi).compress_level != 0) {
+					f2fs_err(sbi, "fixed-output compress layout can only work on lz4");
+					kfree(name);
+					return -EINVAL;
+				}
+				F2FS_OPTION(sbi).compress_layout = COMPRESS_FIXED_OUTPUT;
+			} else {
+				f2fs_err(sbi, "Unknown compress layout");
+				kfree(name);
+				return -EINVAL;
+			}
+			kfree(name);
+#endif
+			break;
 #else
 		case Opt_compress_algorithm:
 		case Opt_compress_log_size:
@@ -1223,6 +1303,7 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 		case Opt_compress_chksum:
 		case Opt_compress_mode:
 		case Opt_compress_cache:
+		case Opt_compress_layout:
 			f2fs_info(sbi, "compression options not supported");
 			break;
 #endif
@@ -1418,6 +1499,10 @@ static struct inode *f2fs_alloc_inode(struct super_block *sb)
 	/* Will be used by directory only */
 	fi->i_dir_level = F2FS_SB(sb)->dir_level;
 
+#ifdef CONFIG_F2FS_FS_DEDUP
+	atomic_set(&fi->inflight_read_io, 0);
+	init_waitqueue_head(&fi->dedup_wq);
+#endif
 	return &fi->vfs_inode;
 }
 
@@ -1879,7 +1964,9 @@ static inline void f2fs_show_compress_options(struct seq_file *seq,
 {
 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
 	char *algtype = "";
+#ifndef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
 	int i;
+#endif
 
 	if (!f2fs_sb_has_compression(sbi))
 		return;
@@ -1906,6 +1993,7 @@ static inline void f2fs_show_compress_options(struct seq_file *seq,
 	seq_printf(seq, ",compress_log_size=%u",
 			F2FS_OPTION(sbi).compress_log_size);
 
+#ifndef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
 	for (i = 0; i < F2FS_OPTION(sbi).compress_ext_cnt; i++) {
 		seq_printf(seq, ",compress_extension=%s",
 			F2FS_OPTION(sbi).extensions[i]);
@@ -1915,6 +2003,7 @@ static inline void f2fs_show_compress_options(struct seq_file *seq,
 		seq_printf(seq, ",nocompress_extension=%s",
 			F2FS_OPTION(sbi).noextensions[i]);
 	}
+#endif
 
 	if (F2FS_OPTION(sbi).compress_chksum)
 		seq_puts(seq, ",compress_chksum");
@@ -2029,7 +2118,7 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 	if (test_opt(sbi, FAULT_INJECTION)) {
 		seq_printf(seq, ",fault_injection=%u",
 				F2FS_OPTION(sbi).fault_info.inject_rate);
-		seq_printf(seq, ",fault_type=%u",
+		seq_printf(seq, ",fault_type=%llu",
 				F2FS_OPTION(sbi).fault_info.inject_type);
 	}
 #endif
@@ -2093,6 +2182,15 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 
 static void default_options(struct f2fs_sb_info *sbi, bool remount)
 {
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	int i = 0;
+
+	if (is_data_partition(sbi) && compress_dedup_enabled()) {
+		sbi->oplus_feats = OPLUS_FEAT_COMPR;
+		sbi->oplus_feats |= OPLUS_FEAT_DEDUP;
+	}
+#endif
+
 	/* init some FS parameters */
 	if (!remount) {
 		set_opt(sbi, READ_EXTENT_CACHE);
@@ -2125,7 +2223,22 @@ static void default_options(struct f2fs_sb_info *sbi, bool remount)
 		F2FS_OPTION(sbi).compress_algorithm = COMPRESS_LZ4;
 		F2FS_OPTION(sbi).compress_log_size = MIN_COMPRESS_LOG_SIZE;
 		F2FS_OPTION(sbi).compress_ext_cnt = 0;
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+		F2FS_OPTION(sbi).compress_mode = COMPR_MODE_USER;
+		if (compress_dedup_enabled()) {
+			F2FS_OPTION(sbi).compress_layout = COMPRESS_FIXED_OUTPUT;
+			strcpy(F2FS_OPTION(sbi).extensions[i++], "odex");
+			strcpy(F2FS_OPTION(sbi).extensions[i++], "vdex");
+			//strcpy(F2FS_OPTION(sbi).extensions[i++], "so");
+			//strcpy(F2FS_OPTION(sbi).extensions[i++], "dex");
+			//strcpy(F2FS_OPTION(sbi).extensions[i++], "wxapkg");
+			//strcpy(F2FS_OPTION(sbi).extensions[i++], "js");
+			F2FS_OPTION(sbi).compress_ext_cnt = (unsigned char)i;
+		}
+#else
 		F2FS_OPTION(sbi).compress_mode = COMPR_MODE_FS;
+#endif
+
 	}
 	F2FS_OPTION(sbi).bggc_mode = BGGC_MODE_ON;
 	F2FS_OPTION(sbi).memory_mode = MEMORY_MODE_NORMAL;
@@ -4931,6 +5044,10 @@ static void destroy_inodecache(void)
 static int __init init_f2fs_fs(void)
 {
 	int err;
+
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	update_compress_dedup_switch();
+#endif
 
 	err = init_inodecache();
 	if (err)
