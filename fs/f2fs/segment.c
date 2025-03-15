@@ -5613,8 +5613,16 @@ int __init f2fs_create_segment_manager_caches(void)
 			sizeof(struct revoke_entry));
 	if (!revoke_entry_slab)
 		goto destroy_sit_entry_set;
+#ifdef CONFIG_F2FS_FS_DEDUP
+	if (create_page_info_slab())
+		goto destroy_revoke_entry;
+#endif
 	return 0;
 
+#ifdef CONFIG_F2FS_FS_DEDUP
+destroy_revoke_entry:
+	kmem_cache_destroy(revoke_entry_slab);
+#endif
 destroy_sit_entry_set:
 	kmem_cache_destroy(sit_entry_set_slab);
 destroy_discard_cmd:
@@ -5631,4 +5639,7 @@ void f2fs_destroy_segment_manager_caches(void)
 	kmem_cache_destroy(discard_cmd_slab);
 	kmem_cache_destroy(discard_entry_slab);
 	kmem_cache_destroy(revoke_entry_slab);
+#ifdef CONFIG_F2FS_FS_DEDUP
+	destroy_page_info_slab();
+#endif
 }

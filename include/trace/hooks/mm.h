@@ -261,9 +261,10 @@ DECLARE_HOOK(android_vh_drain_all_pages_bypass,
 		int migratetype, unsigned long did_some_progress,
 		bool *bypass),
 	TP_ARGS(gfp_mask, order, alloc_flags, migratetype, did_some_progress, bypass));
+
 DECLARE_HOOK(android_vh_save_vmalloc_stack,
-	TP_PROTO(unsigned long flags, struct vm_struct *vm),
-	TP_ARGS(flags, vm));
+        TP_PROTO(unsigned long flags, struct vm_struct *vm),
+        TP_ARGS(flags, vm));
 DECLARE_HOOK(android_vh_show_stack_hash,
 	TP_PROTO(struct seq_file *m, struct vm_struct *v),
 	TP_ARGS(m, v));
