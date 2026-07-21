@@ -306,6 +306,9 @@ static int smmu_alloc_l2_strtab(struct hyp_arm_smmu_v3_device *smmu, u32 idx)
 
 	WRITE_ONCE(smmu->strtab_base[idx], l2ptr | span);
 
+	if (!(smmu->features & ARM_SMMU_FEAT_COHERENCY))
+		kvm_flush_dcache_to_poc(&smmu->strtab_base[idx], STRTAB_L1_DESC_DWORDS << 3);
+
 	return 0;
 }
 
@@ -1194,6 +1197,7 @@ static int smmu_detach_dev(struct kvm_hyp_iommu *iommu, struct kvm_hyp_iommu_dom
 	struct hyp_arm_smmu_v3_domain *smmu_domain = domain->priv;
 	u32 pasid_bits = 0;
 	u64 *cd_table, *cd;
+	u32 domain_id, ste_cfg;
 
 	hyp_write_lock(&smmu_domain->lock);
 	kvm_iommu_lock(iommu);
@@ -1201,6 +1205,7 @@ static int smmu_detach_dev(struct kvm_hyp_iommu *iommu, struct kvm_hyp_iommu_dom
 	if (!dst)
 		goto out_unlock;
 
+	ste_cfg = FIELD_GET(STRTAB_STE_0_CFG, dst[0]);
 	/*
 	 * Look at smmu_domain_config_s1 for CD allocation and life time
 	 * For detach stage-1 domains:
@@ -1210,6 +1215,10 @@ static int smmu_detach_dev(struct kvm_hyp_iommu *iommu, struct kvm_hyp_iommu_dom
 	 * - PASID_BITS = 0: invalidate the STE, the cdptr per domain would be free at free_domain()
 	 */
 	if (smmu_domain->type == KVM_ARM_SMMU_DOMAIN_S1) {
+		if (ste_cfg != STRTAB_STE_0_CFG_S1_TRANS) {
+			ret = -EACCES;
+			goto out_unlock;
+		}
 		pasid_bits = FIELD_GET(STRTAB_STE_0_S1CDMAX, dst[0]);
 		if (pasid >= (1 << pasid_bits)) {
 			ret = -E2BIG;
@@ -1230,8 +1239,26 @@ static int smmu_detach_dev(struct kvm_hyp_iommu *iommu, struct kvm_hyp_iommu_dom
 						goto out_unlock;
 					}
 				}
+				cd = smmu_get_cd_ptr(cd_table, 0);
+				domain_id = FIELD_GET(CTXDESC_CD_0_ASID, cd[0]);
+				if (domain->domain_id != domain_id) {
+					ret = -EACCES;
+					goto out_unlock;
+				}
 			} else {
 				cd = smmu_get_cd_ptr(cd_table, pasid);
+				if (!(cd[0] & CTXDESC_CD_0_V)) {
+					/* The device is not actually attached! */
+					ret = -ENOENT;
+					goto out_unlock;
+				}
+
+				domain_id = FIELD_GET(CTXDESC_CD_0_ASID, cd[0]);
+				if (domain->domain_id != domain_id) {
+					ret = -EACCES;
+					goto out_unlock;
+				}
+
 				cd[0] = 0;
 				smmu_sync_cd(smmu, cd, sid, pasid);
 				cd[1] = 0;
@@ -1241,8 +1268,20 @@ static int smmu_detach_dev(struct kvm_hyp_iommu *iommu, struct kvm_hyp_iommu_dom
 				goto out_skip_ste;
 			}
 		}
+	} else {
+		domain_id = FIELD_GET(STRTAB_STE_2_S2VMID, dst[2]);
+		if ((ste_cfg != STRTAB_STE_0_CFG_S2_TRANS) ||
+		    (domain->domain_id != domain_id)) {
+			ret = -EACCES;
+			goto out_unlock;
+		}
 	}
 	/* For stage-2 and pasid = 0 */
+	if (!(dst[0] & STRTAB_STE_0_V)) {
+		/* The device is not actually attached! */
+		ret = -ENOENT;
+		goto out_unlock;
+	}
 	dst[0] = 0;
 	ret = smmu_sync_ste(smmu, dst, sid);
 	if (ret)
@@ -1390,7 +1429,7 @@ int smmu_map_pages(struct kvm_hyp_iommu_domain *domain, unsigned long iova,
 {
 	size_t mapped;
 	size_t granule;
-	int ret;
+	int ret = 0;
 	struct hyp_arm_smmu_v3_domain *smmu_domain = domain->priv;
 
 	granule = 1UL << __ffs(smmu_domain->pgtable->cfg.pgsize_bitmap);
@@ -1398,7 +1437,7 @@ int smmu_map_pages(struct kvm_hyp_iommu_domain *domain, unsigned long iova,
 		return -EINVAL;
 
 	hyp_spin_lock(&smmu_domain->pgt_lock);
-	while (pgcount && !ret) {
+	while (pgcount) {
 		mapped = 0;
 		ret = smmu_domain->pgtable->ops.map_pages(&smmu_domain->pgtable->ops, iova,
 							  paddr, pgsize, pgcount, prot, 0, &mapped);
@@ -1414,7 +1453,7 @@ int smmu_map_pages(struct kvm_hyp_iommu_domain *domain, unsigned long iova,
 	}
 	hyp_spin_unlock(&smmu_domain->pgt_lock);
 
-	return 0;
+	return ret;
 }
 
 static void kvm_iommu_unmap_walker(struct io_pgtable_ctxt *ctxt)

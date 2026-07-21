@@ -84,6 +84,10 @@ DECLARE_RESTRICTED_HOOK(android_rvh_setscheduler,
 	TP_PROTO(struct task_struct *p),
 	TP_ARGS(p), 1);
 
+DECLARE_RESTRICTED_HOOK(android_rvh_setscheduler_prio,
+	TP_PROTO(struct task_struct *p),
+	TP_ARGS(p), 1);
+
 struct sched_group;
 DECLARE_RESTRICTED_HOOK(android_rvh_find_busiest_group,
 	TP_PROTO(struct sched_group *busiest, struct rq *dst_rq, int *out_balance),
@@ -179,6 +183,15 @@ DECLARE_RESTRICTED_HOOK(android_rvh_sched_cpu_dying,
 DECLARE_RESTRICTED_HOOK(android_rvh_account_irq,
 	TP_PROTO(struct task_struct *curr, int cpu, s64 delta, bool start),
 	TP_ARGS(curr, cpu, delta, start), 1);
+
+DECLARE_RESTRICTED_HOOK(android_rvh_before_pick_task_fair,
+	TP_PROTO(struct rq *rq, struct task_struct **p, struct sched_entity **se,
+			struct task_struct *prev, struct rq_flags *rf),
+	TP_ARGS(rq, p, se, prev, rf), 1);
+
+DECLARE_RESTRICTED_HOOK(android_rvh_balance_fair,
+	TP_PROTO(struct rq *rq, struct task_struct *prev, struct rq_flags *rf),
+	TP_ARGS(rq, prev, rf), 1);
 
 struct sched_entity;
 DECLARE_RESTRICTED_HOOK(android_rvh_place_entity,
@@ -433,6 +446,10 @@ DECLARE_RESTRICTED_HOOK(android_rvh_context_switch,
 DECLARE_HOOK(android_vh_mmput,
 	TP_PROTO(void *unused),
 	TP_ARGS(unused));
+
+DECLARE_HOOK(android_vh_mmput_mm,
+	TP_PROTO(struct mm_struct *mm),
+	TP_ARGS(mm));
 
 DECLARE_RESTRICTED_HOOK(android_rvh_attach_entity_load_avg,
 	TP_PROTO(struct cfs_rq *cfs_rq, struct sched_entity *se),

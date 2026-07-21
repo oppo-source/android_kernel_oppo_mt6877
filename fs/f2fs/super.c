@@ -39,6 +39,34 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/f2fs.h>
 
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+#include <linux/of.h>
+static const char *compress_dedup_switch = NULL;
+
+#define COMPRESS_DEDUP_CONFIG_PATH "/soc/oplus,f2fs/compress_dedup"
+static void update_compress_dedup_switch(void)
+{
+	struct device_node *np = of_find_node_by_path(COMPRESS_DEDUP_CONFIG_PATH);
+	if (np) {
+		of_property_read_string(np, "switch", &compress_dedup_switch);
+	}
+}
+
+bool compress_dedup_enabled(void)
+{
+	return compress_dedup_switch != NULL;
+}
+
+static bool is_data_partition(struct f2fs_sb_info *sbi)
+{
+	uint64_t min_data_partition_blocks = 0x800000; // 32GB
+
+	if (le64_to_cpu(sbi->raw_super->block_count) > min_data_partition_blocks)
+		return true;
+	return false;
+}
+#endif
+
 static struct kmem_cache *f2fs_inode_cachep;
 
 #ifdef CONFIG_F2FS_FAULT_INJECTION
@@ -64,10 +92,22 @@ const char *f2fs_fault_name[FAULT_MAX] = {
 	[FAULT_BLKADDR_VALIDITY]	= "invalid blkaddr",
 	[FAULT_BLKADDR_CONSISTENCE]	= "inconsistent blkaddr",
 	[FAULT_NO_SEGMENT]		= "no free segment",
+	[FAULT_COMPRESS_REDIRTY] = "compress ioc redirty",
+	[FAULT_COMPRESS_WRITEBACK] = "compress ioc writeback",
+	[FAULT_COMPRESS_RESERVE_NOSPC] = "compress reserve nospc",
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	[FAULT_COMPRESS_VMAP] = "compress vmap",
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	[FAULT_COMPRESS_INIT_CTX] = "compress init ctx",
+	[FAULT_COMPRESS_PAGE_ARRAY] = "compress page array",
+	[FAULT_COMPRESS_LOW_RATIO] = "compress low ratio",
+	[FAULT_COMPRESS_GET_DNODE] = "compress get dnode",
+#endif
+#endif
 };
 
 int f2fs_build_fault_attr(struct f2fs_sb_info *sbi, unsigned long rate,
-							unsigned long type)
+							unsigned long long type)
 {
 	struct f2fs_fault_info *ffi = &F2FS_OPTION(sbi).fault_info;
 
@@ -79,16 +119,16 @@ int f2fs_build_fault_attr(struct f2fs_sb_info *sbi, unsigned long rate,
 	}
 
 	if (type) {
-		if (type >= BIT(FAULT_MAX))
+		if (type >= 1ULL << FAULT_MAX)
 			return -EINVAL;
-		ffi->inject_type = (unsigned int)type;
+		ffi->inject_type = type;
 	}
 
 	if (!rate && !type)
 		memset(ffi, 0, sizeof(struct f2fs_fault_info));
 	else
 		f2fs_info(sbi,
-			"build fault injection attr: rate: %lu, type: 0x%lx",
+			"build fault injection attr: rate: %lu, type: 0x%llx",
 								rate, type);
 	return 0;
 }
@@ -131,6 +171,7 @@ enum {
 	Opt_noinline_data,
 	Opt_data_flush,
 	Opt_reserve_root,
+	Opt_reserve_node,
 	Opt_resgid,
 	Opt_resuid,
 	Opt_mode,
@@ -169,6 +210,7 @@ enum {
 	Opt_compress_chksum,
 	Opt_compress_mode,
 	Opt_compress_cache,
+	Opt_compress_layout,
 	Opt_atgc,
 	Opt_gc_merge,
 	Opt_nogc_merge,
@@ -176,6 +218,7 @@ enum {
 	Opt_memory_mode,
 	Opt_age_extent_cache,
 	Opt_errors,
+	Opt_lookup_mode,
 	Opt_err,
 };
 
@@ -209,6 +252,7 @@ static match_table_t f2fs_tokens = {
 	{Opt_noinline_data, "noinline_data"},
 	{Opt_data_flush, "data_flush"},
 	{Opt_reserve_root, "reserve_root=%u"},
+	{Opt_reserve_node, "reserve_node=%u"},
 	{Opt_resgid, "resgid=%u"},
 	{Opt_resuid, "resuid=%u"},
 	{Opt_mode, "mode=%s"},
@@ -248,6 +292,7 @@ static match_table_t f2fs_tokens = {
 	{Opt_compress_chksum, "compress_chksum"},
 	{Opt_compress_mode, "compress_mode=%s"},
 	{Opt_compress_cache, "compress_cache"},
+	{Opt_compress_layout, "compress_layout=%s"},
 	{Opt_atgc, "atgc"},
 	{Opt_gc_merge, "gc_merge"},
 	{Opt_nogc_merge, "nogc_merge"},
@@ -255,6 +300,7 @@ static match_table_t f2fs_tokens = {
 	{Opt_memory_mode, "memory=%s"},
 	{Opt_age_extent_cache, "age_extent_cache"},
 	{Opt_errors, "errors=%s"},
+	{Opt_lookup_mode, "lookup_mode=%s"},
 	{Opt_err, NULL},
 };
 
@@ -321,22 +367,30 @@ static void f2fs_destroy_casefold_cache(void) { }
 
 static inline void limit_reserve_root(struct f2fs_sb_info *sbi)
 {
-	block_t limit = min((sbi->user_block_count >> 3),
+	block_t block_limit = min((sbi->user_block_count >> 3),
 			sbi->user_block_count - sbi->reserved_blocks);
+	block_t node_limit = sbi->total_node_count >> 3;
 
 	/* limit is 12.5% */
 	if (test_opt(sbi, RESERVE_ROOT) &&
-			F2FS_OPTION(sbi).root_reserved_blocks > limit) {
-		F2FS_OPTION(sbi).root_reserved_blocks = limit;
+			F2FS_OPTION(sbi).root_reserved_blocks > block_limit) {
+		F2FS_OPTION(sbi).root_reserved_blocks = block_limit;
 		f2fs_info(sbi, "Reduce reserved blocks for root = %u",
 			  F2FS_OPTION(sbi).root_reserved_blocks);
 	}
-	if (!test_opt(sbi, RESERVE_ROOT) &&
+	if (test_opt(sbi, RESERVE_NODE) &&
+			F2FS_OPTION(sbi).root_reserved_nodes > node_limit) {
+		F2FS_OPTION(sbi).root_reserved_nodes = node_limit;
+		f2fs_info(sbi, "Reduce reserved nodes for root = %u",
+			  F2FS_OPTION(sbi).root_reserved_nodes);
+	}
+	if (!test_opt(sbi, RESERVE_ROOT) && !test_opt(sbi, RESERVE_NODE) &&
 		(!uid_eq(F2FS_OPTION(sbi).s_resuid,
 				make_kuid(&init_user_ns, F2FS_DEF_RESUID)) ||
 		!gid_eq(F2FS_OPTION(sbi).s_resgid,
 				make_kgid(&init_user_ns, F2FS_DEF_RESGID))))
-		f2fs_info(sbi, "Ignore s_resuid=%u, s_resgid=%u w/o reserve_root",
+		f2fs_info(sbi, "Ignore s_resuid=%u, s_resgid=%u w/o reserve_root"
+				" and reserve_node",
 			  from_kuid_munged(&init_user_ns,
 					   F2FS_OPTION(sbi).s_resuid),
 			  from_kgid_munged(&init_user_ns,
@@ -668,6 +722,9 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 #endif
 	char *p, *name;
 	int arg = 0;
+#ifdef CONFIG_F2FS_FAULT_INJECTION
+	unsigned long long larg;
+#endif
 	kuid_t uid;
 	kgid_t gid;
 	int ret;
@@ -847,6 +904,17 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 				set_opt(sbi, RESERVE_ROOT);
 			}
 			break;
+		case Opt_reserve_node:
+			if (args->from && match_int(args, &arg))
+				return -EINVAL;
+			if (test_opt(sbi, RESERVE_NODE)) {
+				f2fs_info(sbi, "Preserve previous reserve_node=%u",
+					  F2FS_OPTION(sbi).root_reserved_nodes);
+			} else {
+				F2FS_OPTION(sbi).root_reserved_nodes = arg;
+				set_opt(sbi, RESERVE_NODE);
+			}
+			break;
 		case Opt_resuid:
 			if (args->from && match_int(args, &arg))
 				return -EINVAL;
@@ -897,9 +965,9 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 			break;
 
 		case Opt_fault_type:
-			if (args->from && match_int(args, &arg))
+			if (args->from && match_u64(args, &larg))
 				return -EINVAL;
-			if (f2fs_build_fault_attr(sbi, 0, arg))
+			if (f2fs_build_fault_attr(sbi, 0, larg))
 				return -EINVAL;
 			set_opt(sbi, FAULT_INJECTION);
 			break;
@@ -998,9 +1066,9 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 				return -ENOMEM;
 
 			if (!strcmp(name, "default")) {
-				F2FS_OPTION(sbi).alloc_mode = ALLOC_MODE_DEFAULT;
+				f2fs_set_alloc_mode(sbi, ALLOC_MODE_DEFAULT);
 			} else if (!strcmp(name, "reuse")) {
-				F2FS_OPTION(sbi).alloc_mode = ALLOC_MODE_REUSE;
+				f2fs_set_alloc_mode(sbi, ALLOC_MODE_REUSE);
 			} else {
 				kfree(name);
 				return -EINVAL;
@@ -1116,6 +1184,15 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 				kfree(name);
 				return -EINVAL;
 			}
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+			if (F2FS_OPTION(sbi).compress_layout == COMPRESS_FIXED_OUTPUT &&
+			    (F2FS_OPTION(sbi).compress_algorithm != COMPRESS_LZ4 ||
+			     F2FS_OPTION(sbi).compress_level != 0)) {
+				f2fs_err(sbi, "fixed-output compress layout can only work on lz4");
+				kfree(name);
+				return -EINVAL;
+			}
+#endif
 			kfree(name);
 			break;
 		case Opt_compress_log_size:
@@ -1223,6 +1300,32 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 			}
 			set_opt(sbi, COMPRESS_CACHE);
 			break;
+		case Opt_compress_layout:
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+			if (!f2fs_sb_has_compression(sbi)) {
+				f2fs_info(sbi, "Image doesn't support compression");
+				break;
+			}
+			name = match_strdup(&args[0]);
+			/* fix coverity error: Dereference null return value name*/
+			if (name && !strcmp(name, "fixed-input")) {
+				F2FS_OPTION(sbi).compress_layout = COMPRESS_FIXED_INPUT;
+			} else if (name && !strcmp(name, "fixed-output")) {
+				if (F2FS_OPTION(sbi).compress_algorithm != COMPRESS_LZ4 ||
+				    F2FS_OPTION(sbi).compress_level != 0) {
+					f2fs_err(sbi, "fixed-output compress layout can only work on lz4");
+					kfree(name);
+					return -EINVAL;
+				}
+				F2FS_OPTION(sbi).compress_layout = COMPRESS_FIXED_OUTPUT;
+			} else {
+				f2fs_err(sbi, "Unknown compress layout");
+				kfree(name);
+				return -EINVAL;
+			}
+			kfree(name);
+#endif
+			break;
 #else
 		case Opt_compress_algorithm:
 		case Opt_compress_log_size:
@@ -1231,6 +1334,7 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 		case Opt_compress_chksum:
 		case Opt_compress_mode:
 		case Opt_compress_cache:
+		case Opt_compress_layout:
 			f2fs_info(sbi, "compression options not supported");
 			break;
 #endif
@@ -1294,6 +1398,22 @@ static int parse_options(struct super_block *sb, char *options, bool is_remount)
 			} else if (!strcmp(name, "panic")) {
 				F2FS_OPTION(sbi).errors =
 						MOUNT_ERRORS_PANIC;
+			} else {
+				kfree(name);
+				return -EINVAL;
+			}
+			kfree(name);
+			break;
+		case Opt_lookup_mode:
+			name = match_strdup(&args[0]);
+			if (!name)
+				return -ENOMEM;
+			if (!strcmp(name, "perf")) {
+				f2fs_set_lookup_mode(sbi, LOOKUP_PERF);
+			} else if (!strcmp(name, "compat")) {
+				f2fs_set_lookup_mode(sbi, LOOKUP_COMPAT);
+			} else if (!strcmp(name, "auto")) {
+				f2fs_set_lookup_mode(sbi, LOOKUP_AUTO);
 			} else {
 				kfree(name);
 				return -EINVAL;
@@ -1419,6 +1539,7 @@ static struct inode *f2fs_alloc_inode(struct super_block *sb)
 	spin_lock_init(&fi->i_size_lock);
 	INIT_LIST_HEAD(&fi->dirty_list);
 	INIT_LIST_HEAD(&fi->gdirty_list);
+	INIT_LIST_HEAD(&fi->gdonate_list);
 	init_f2fs_rwsem(&fi->i_gc_rwsem[READ]);
 	init_f2fs_rwsem(&fi->i_gc_rwsem[WRITE]);
 	init_f2fs_rwsem(&fi->i_xattr_sem);
@@ -1426,6 +1547,10 @@ static struct inode *f2fs_alloc_inode(struct super_block *sb)
 	/* Will be used by directory only */
 	fi->i_dir_level = F2FS_SB(sb)->dir_level;
 
+#ifdef CONFIG_F2FS_FS_DEDUP
+	atomic_set(&fi->inflight_read_io, 0);
+	init_waitqueue_head(&fi->dedup_wq);
+#endif
 	return &fi->vfs_inode;
 }
 
@@ -1505,6 +1630,10 @@ int f2fs_inode_dirtied(struct inode *inode, bool sync)
 		inc_page_count(sbi, F2FS_DIRTY_IMETA);
 	}
 	spin_unlock(&sbi->inode_lock[DIRTY_META]);
+
+	if (!ret && f2fs_is_atomic_file(inode))
+		set_inode_flag(inode, FI_ATOMIC_DIRTIED);
+
 	return ret;
 }
 
@@ -1816,7 +1945,8 @@ static int f2fs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_blocks = total_count - start_count;
 
 	spin_lock(&sbi->stat_lock);
-
+	if (sbi->carve_out)
+		buf->f_blocks -= sbi->current_reserved_blocks;
 	user_block_count = sbi->user_block_count;
 	total_valid_node_count = valid_node_count(sbi);
 	avail_node_count = sbi->total_node_count - F2FS_RESERVED_NODE_NUM;
@@ -1899,7 +2029,9 @@ static inline void f2fs_show_compress_options(struct seq_file *seq,
 {
 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
 	char *algtype = "";
+#ifndef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
 	int i;
+#endif
 
 	if (!f2fs_sb_has_compression(sbi))
 		return;
@@ -1926,6 +2058,7 @@ static inline void f2fs_show_compress_options(struct seq_file *seq,
 	seq_printf(seq, ",compress_log_size=%u",
 			F2FS_OPTION(sbi).compress_log_size);
 
+#ifndef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
 	for (i = 0; i < F2FS_OPTION(sbi).compress_ext_cnt; i++) {
 		seq_printf(seq, ",compress_extension=%s",
 			F2FS_OPTION(sbi).extensions[i]);
@@ -1935,6 +2068,7 @@ static inline void f2fs_show_compress_options(struct seq_file *seq,
 		seq_printf(seq, ",nocompress_extension=%s",
 			F2FS_OPTION(sbi).noextensions[i]);
 	}
+#endif
 
 	if (F2FS_OPTION(sbi).compress_chksum)
 		seq_puts(seq, ",compress_chksum");
@@ -2038,9 +2172,11 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 	else if (F2FS_OPTION(sbi).fs_mode == FS_MODE_FRAGMENT_BLK)
 		seq_puts(seq, "fragment:block");
 	seq_printf(seq, ",active_logs=%u", F2FS_OPTION(sbi).active_logs);
-	if (test_opt(sbi, RESERVE_ROOT))
-		seq_printf(seq, ",reserve_root=%u,resuid=%u,resgid=%u",
+	if (test_opt(sbi, RESERVE_ROOT) || test_opt(sbi, RESERVE_NODE))
+		seq_printf(seq, ",reserve_root=%u,reserve_node=%u,resuid=%u,"
+				"resgid=%u",
 				F2FS_OPTION(sbi).root_reserved_blocks,
+				F2FS_OPTION(sbi).root_reserved_nodes,
 				from_kuid_munged(&init_user_ns,
 					F2FS_OPTION(sbi).s_resuid),
 				from_kgid_munged(&init_user_ns,
@@ -2049,7 +2185,7 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 	if (test_opt(sbi, FAULT_INJECTION)) {
 		seq_printf(seq, ",fault_injection=%u",
 				F2FS_OPTION(sbi).fault_info.inject_rate);
-		seq_printf(seq, ",fault_type=%u",
+		seq_printf(seq, ",fault_type=%llu",
 				F2FS_OPTION(sbi).fault_info.inject_type);
 	}
 #endif
@@ -2070,9 +2206,9 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 	if (sbi->sb->s_flags & SB_INLINECRYPT)
 		seq_puts(seq, ",inlinecrypt");
 
-	if (F2FS_OPTION(sbi).alloc_mode == ALLOC_MODE_DEFAULT)
+	if (f2fs_get_alloc_mode(sbi) == ALLOC_MODE_DEFAULT)
 		seq_printf(seq, ",alloc_mode=%s", "default");
-	else if (F2FS_OPTION(sbi).alloc_mode == ALLOC_MODE_REUSE)
+	else if (f2fs_get_alloc_mode(sbi) == ALLOC_MODE_REUSE)
 		seq_printf(seq, ",alloc_mode=%s", "reuse");
 
 	if (test_opt(sbi, DISABLE_CHECKPOINT))
@@ -2108,11 +2244,27 @@ static int f2fs_show_options(struct seq_file *seq, struct dentry *root)
 	else if (F2FS_OPTION(sbi).errors == MOUNT_ERRORS_PANIC)
 		seq_printf(seq, ",errors=%s", "panic");
 
+	if (f2fs_get_lookup_mode(sbi) == LOOKUP_PERF)
+		seq_show_option(seq, "lookup_mode", "perf");
+	else if (f2fs_get_lookup_mode(sbi) == LOOKUP_COMPAT)
+		seq_show_option(seq, "lookup_mode", "compat");
+	else if (f2fs_get_lookup_mode(sbi) == LOOKUP_AUTO)
+		seq_show_option(seq, "lookup_mode", "auto");
+
 	return 0;
 }
 
 static void default_options(struct f2fs_sb_info *sbi, bool remount)
 {
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	int i = 0;
+
+	if (is_data_partition(sbi) && compress_dedup_enabled()) {
+		sbi->oplus_feats = OPLUS_FEAT_COMPR;
+		sbi->oplus_feats |= OPLUS_FEAT_DEDUP;
+	}
+#endif
+
 	/* init some FS parameters */
 	if (!remount) {
 		set_opt(sbi, READ_EXTENT_CACHE);
@@ -2135,9 +2287,9 @@ static void default_options(struct f2fs_sb_info *sbi, bool remount)
 	F2FS_OPTION(sbi).inline_xattr_size = DEFAULT_INLINE_XATTR_ADDRS;
 	if (le32_to_cpu(F2FS_RAW_SUPER(sbi)->segment_count_main) <=
 							SMALL_VOLUME_SEGMENTS)
-		F2FS_OPTION(sbi).alloc_mode = ALLOC_MODE_REUSE;
+		f2fs_set_alloc_mode(sbi, ALLOC_MODE_REUSE);
 	else
-		F2FS_OPTION(sbi).alloc_mode = ALLOC_MODE_DEFAULT;
+		f2fs_set_alloc_mode(sbi, ALLOC_MODE_DEFAULT);
 	F2FS_OPTION(sbi).fsync_mode = FSYNC_MODE_POSIX;
 	F2FS_OPTION(sbi).s_resuid = make_kuid(&init_user_ns, F2FS_DEF_RESUID);
 	F2FS_OPTION(sbi).s_resgid = make_kgid(&init_user_ns, F2FS_DEF_RESGID);
@@ -2145,7 +2297,22 @@ static void default_options(struct f2fs_sb_info *sbi, bool remount)
 		F2FS_OPTION(sbi).compress_algorithm = COMPRESS_LZ4;
 		F2FS_OPTION(sbi).compress_log_size = MIN_COMPRESS_LOG_SIZE;
 		F2FS_OPTION(sbi).compress_ext_cnt = 0;
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+		F2FS_OPTION(sbi).compress_mode = COMPR_MODE_USER;
+		if (compress_dedup_enabled()) {
+			F2FS_OPTION(sbi).compress_layout = COMPRESS_FIXED_OUTPUT;
+			strcpy(F2FS_OPTION(sbi).extensions[i++], "odex");
+			strcpy(F2FS_OPTION(sbi).extensions[i++], "vdex");
+			//strcpy(F2FS_OPTION(sbi).extensions[i++], "so");
+			//strcpy(F2FS_OPTION(sbi).extensions[i++], "dex");
+			//strcpy(F2FS_OPTION(sbi).extensions[i++], "wxapkg");
+			//strcpy(F2FS_OPTION(sbi).extensions[i++], "js");
+			F2FS_OPTION(sbi).compress_ext_cnt = (unsigned char)i;
+		}
+#else
 		F2FS_OPTION(sbi).compress_mode = COMPR_MODE_FS;
+#endif
+
 	}
 	F2FS_OPTION(sbi).bggc_mode = BGGC_MODE_ON;
 	F2FS_OPTION(sbi).memory_mode = MEMORY_MODE_NORMAL;
@@ -2172,6 +2339,8 @@ static void default_options(struct f2fs_sb_info *sbi, bool remount)
 #endif
 
 	f2fs_build_fault_attr(sbi, 0, 0);
+
+	f2fs_set_lookup_mode(sbi, LOOKUP_PERF);
 }
 
 #ifdef CONFIG_QUOTA
@@ -4646,6 +4815,10 @@ try_onemore:
 	/* get segno of first zoned block device */
 	sbi->first_zoned_segno = get_first_zoned_segno(sbi);
 
+	sbi->reserved_pin_section = f2fs_sb_has_blkzoned(sbi) ?
+			ZONED_PIN_SEC_REQUIRED_COUNT :
+			GET_SEC_FROM_SEG(sbi, overprovision_segments(sbi));
+
 	/* Read accumulated write IO statistics if exists */
 	seg_i = CURSEG_I(sbi, CURSEG_HOT_NODE);
 	if (__exist_node_summaries(sbi))
@@ -4709,8 +4882,10 @@ try_onemore:
 	if (err)
 		goto free_meta;
 
-	if (unlikely(is_set_ckpt_flags(sbi, CP_DISABLED_FLAG)))
+	if (unlikely(is_set_ckpt_flags(sbi, CP_DISABLED_FLAG))) {
+		skip_recovery = true;
 		goto reset_checkpoint;
+	}
 
 	/* recover fsynced data */
 	if (!test_opt(sbi, DISABLE_ROLL_FORWARD) &&
@@ -4990,6 +5165,10 @@ static void destroy_inodecache(void)
 static int __init init_f2fs_fs(void)
 {
 	int err;
+
+#ifdef CONFIG_F2FS_FS_COMPRESSION_FIXED_OUTPUT
+	update_compress_dedup_switch();
+#endif
 
 	err = init_inodecache();
 	if (err)
