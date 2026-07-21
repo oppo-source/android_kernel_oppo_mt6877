@@ -36,6 +36,7 @@
 #include <linux/blk-mq.h>
 #include <linux/spinlock.h>
 #include <uapi/linux/loop.h>
+#include <trace/hooks/blk.h>
 
 /* Possible states of device */
 enum {
@@ -441,7 +442,7 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	cmd->iocb.ki_filp = file;
 	cmd->iocb.ki_complete = lo_rw_aio_complete;
 	cmd->iocb.ki_flags = IOCB_DIRECT;
-	cmd->iocb.ki_ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_NONE, 0);
+	cmd->iocb.ki_ioprio = req_get_ioprio(rq);
 
 	if (rw == ITER_SOURCE)
 		ret = call_write_iter(file, &cmd->iocb, &iter);
@@ -624,19 +625,20 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 	 * dependency.
 	 */
 	fput(old_file);
+	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
 	if (partscan)
 		loop_reread_partitions(lo);
 
 	error = 0;
 done:
-	/* enable and uncork uevent now that we are done */
-	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
+	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
 	return error;
 
 out_err:
 	loop_global_unlock(lo, is_loop);
 out_putf:
 	fput(file);
+	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
 	goto done;
 }
 
@@ -829,8 +831,12 @@ static void loop_queue_work(struct loop_device *lo, struct loop_cmd *cmd)
 	struct loop_worker *cur_worker, *worker = NULL;
 	struct work_struct *work;
 	struct list_head *cmd_list;
+	bool skip = false;
 
 	spin_lock_irq(&lo->lo_work_lock);
+	trace_android_vh_loop_skip_queue_work(blk_mq_rq_from_pdu(cmd), &skip);
+	if (skip)
+		goto skip_queue_work;
 
 	if (queue_on_root_worker(cmd->blkcg_css))
 		goto queue_work;
@@ -890,6 +896,7 @@ queue_work:
 	}
 	list_add_tail(&cmd->list_entry, cmd_list);
 	queue_work(lo->workqueue, work);
+skip_queue_work:
 	spin_unlock_irq(&lo->lo_work_lock);
 }
 
@@ -1104,8 +1111,8 @@ static int loop_configure(struct loop_device *lo, blk_mode_t mode,
 	if (partscan)
 		clear_bit(GD_SUPPRESS_PART_SCAN, &lo->lo_disk->state);
 
-	/* enable and uncork uevent now that we are done */
 	dev_set_uevent_suppress(disk_to_dev(lo->lo_disk), 0);
+	kobject_uevent(&disk_to_dev(lo->lo_disk)->kobj, KOBJ_CHANGE);
 
 	loop_global_unlock(lo, is_loop);
 	if (partscan)
@@ -1962,6 +1969,13 @@ static void loop_process_work(struct loop_worker *worker,
 	spin_unlock_irq(&lo->lo_work_lock);
 	current->flags = orig_flags;
 }
+
+void loop_process_cmd_list(struct list_head *cmd_list, struct gendisk *disk)
+{
+	struct loop_device *lo = disk->private_data;
+	loop_process_work(NULL, cmd_list, lo);
+}
+EXPORT_SYMBOL_GPL(loop_process_cmd_list);
 
 static void loop_workfn(struct work_struct *work)
 {

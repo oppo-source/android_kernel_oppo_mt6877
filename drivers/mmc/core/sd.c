@@ -29,6 +29,9 @@
 #include "quirks.h"
 #include "sd.h"
 #include "sd_ops.h"
+#ifdef CONFIG_MMC_PASSWORDS
+#include "lock.h"
+#endif
 
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
@@ -621,7 +624,7 @@ static int sd_set_current_limit(struct mmc_card *card, u8 *status)
 /*
  * UHS-I specific initialization procedure
  */
-static int mmc_sd_init_uhs_card(struct mmc_card *card)
+int mmc_sd_init_uhs_card(struct mmc_card *card)
 {
 	int err;
 	u8 *status;
@@ -690,6 +693,7 @@ out:
 
 	return err;
 }
+//EXPORT_SYMBOL_GPL(mmc_sd_init_uhs_card);
 
 MMC_DEV_ATTR(cid, "%08x%08x%08x%08x\n", card->raw_cid[0], card->raw_cid[1],
 	card->raw_cid[2], card->raw_cid[3]);
@@ -810,6 +814,30 @@ struct device_type sd_type = {
 	.groups = sd_std_groups,
 };
 
+#ifdef CONFIG_MMC_PASSWORDS
+/*
+ * Adds sysfs entries as relevant.
+ */
+static int mmc_sd_sysfs_add(struct mmc_host *host, struct mmc_card *card)
+{
+	int ret;
+
+	ret = mmc_lock_add_sysfs(card);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return 0;
+}
+
+/*
+ * Removes the sysfs entries added by mmc_sysfs_add().
+ */
+static void mmc_sd_sysfs_remove(struct mmc_host *host, struct mmc_card *card)
+{
+	mmc_lock_remove_sysfs(card);
+}
+#endif
 /*
  * Fetch CID from card.
  */
@@ -1395,6 +1423,40 @@ out:
 	return err;
 }
 
+#ifdef CONFIG_MMC_PASSWORDS
+void mmc_alloc_sdlock(struct mmc_host *host)
+{
+	mmc_sd_lock *sdlock = NULL;
+
+	sdlock = kzalloc(sizeof(struct mmc_sd_lock), GFP_KERNEL);
+	if (!sdlock) {
+		dev_warn(host->parent, "alloc sdlock failed\n");
+		return;
+	}
+
+	sdlock->auto_unlock = false;
+	sdlock->swith_voltage = false;
+	sdlock->sysfs_add = mmc_sd_sysfs_add;
+	sdlock->sysfs_remove = mmc_sd_sysfs_remove;
+	host->android_kabi_reserved1 = (u64)sdlock;
+	dev_warn(host->parent, "alloc sdlock succeed\n");
+}
+
+void mmc_release_sdlock(struct mmc_host *host)
+{
+	mmc_sd_lock *sdlock = (mmc_sd_lock *)host->android_kabi_reserved1;
+	if (sdlock) {
+		kfree(sdlock);
+		sdlock = NULL;
+	}
+}
+
+void mmc_sd_go_highspeed(struct mmc_card *card)
+{
+	mmc_set_timing(card->host, MMC_TIMING_SD_HS);
+}
+#endif
+
 /*
  * Handle the detection and initialisation of a card.
  *
@@ -1409,6 +1471,9 @@ static int mmc_sd_init_card(struct mmc_host *host, u32 ocr,
 	u32 cid[4];
 	u32 rocr = 0;
 	bool v18_fixup_failed = false;
+#ifdef CONFIG_MMC_PASSWORDS
+	u32 status = 0;
+#endif
 
 	WARN_ON(!host->claimed);
 retry:
@@ -1435,6 +1500,9 @@ retry:
 		card->ocr = ocr;
 		card->type = MMC_TYPE_SD;
 		memcpy(card->raw_cid, cid, sizeof(card->raw_cid));
+#ifdef CONFIG_MMC_PASSWORDS
+		mmc_alloc_sdlock(host);
+#endif
 	}
 
 	/*
@@ -1451,7 +1519,24 @@ retry:
 		if (err)
 			goto free_card;
 	}
-
+#ifdef CONFIG_MMC_PASSWORDS
+	/* whether voltage switch just for sd card */
+        mmc_sd_lock *sdlock = (mmc_sd_lock *)host->android_kabi_reserved1;
+	if (rocr & SD_ROCR_S18A)
+		sdlock->swith_voltage = true;
+	else
+		sdlock->swith_voltage = false;
+	/*
+	 * Check if card is locked.
+        */
+	err = mmc_send_status(card, &status);
+	if (err)
+		goto free_card;
+	if (status & R1_CARD_IS_LOCKED) {
+		mmc_card_set_encrypted(card);
+		mmc_card_set_locked(card);
+	}
+#endif
 	if (!oldcard) {
 		err = mmc_sd_get_csd(card);
 		if (err)
@@ -1475,7 +1560,38 @@ retry:
 		if (err)
 			goto free_card;
 	}
+#ifdef CONFIG_MMC_PASSWORDS
+	if (status & R1_CARD_IS_LOCKED) {
+		if (sdlock->auto_unlock) {
+			if (sdlock->unlock_pwd[0] > 0) {
+				/* unlock sd card */
+				err = mmc_lock_unlock_by_buf(card, sdlock->unlock_pwd+1, (int)sdlock->unlock_pwd[0], MMC_LOCK_MODE_UNLOCK);
+				if (err) {
+					printk("[SDLOCK] %s unlock failed \n", __func__);
+				}
+				else {
+					if (!mmc_card_locked(card)) {
+						sdlock->auto_unlock = false;
+						printk("[SDLOCK] %s unlock success and sdcard status is unlocked.\n", __func__);
+					}
+				}
+				/* Check if card is locked */
+				err = mmc_send_status(card, &status);
+				if (err) {
+					printk("[SDLOCK] %s resume sd card exception /n", __func__);
+					goto free_card;
+				}
+			}
+			else {
+				printk("[SDLOCK] %s unlock password is null\n", __func__);
+			}
+		}
 
+		if (status & R1_CARD_IS_LOCKED) {
+			goto done;
+		}
+	}
+#endif
 	/* Apply quirks prior to card setup */
 	mmc_fixup_device(card, mmc_sd_fixups);
 
@@ -1580,13 +1696,15 @@ cont:
 		err = -EINVAL;
 		goto free_card;
 	}
-
+done:
 	host->card = card;
 	return 0;
 
 free_card:
-	if (!oldcard)
-		mmc_remove_card(card);
+	if (!oldcard) {
+        mmc_remove_card(card);
+        mmc_release_sdlock(host);
+    }
 
 	return err;
 }
@@ -1598,6 +1716,9 @@ static void mmc_sd_remove(struct mmc_host *host)
 {
 	mmc_remove_card(host->card);
 	host->card = NULL;
+#ifdef CONFIG_MMC_PASSWORDS
+    mmc_release_sdlock(host);
+#endif
 }
 
 /*
@@ -1719,7 +1840,16 @@ static int _mmc_sd_suspend(struct mmc_host *host)
 		mmc_power_off(host);
 		mmc_card_set_suspended(card);
 	}
-
+#ifdef CONFIG_MMC_PASSWORDS
+        mmc_sd_lock *sdlock = (mmc_sd_lock *)host->android_kabi_reserved1;
+	/*if sd is unlock , set auto unlock flag , so system resume auto unlock sd card */
+	if (!mmc_card_locked(host->card)) {
+		pr_err("%s: [SDLOCK] sdcard is unlocked on suspend and set auto_unlock = true. \n", mmc_hostname(host));
+		sdlock->auto_unlock = true;
+	}
+/*	mmc_card_clr_locked(host->card);
+	mmc_card_clr_encrypted(host->card);*/
+#endif
 out:
 	mmc_release_host(host);
 	return err;

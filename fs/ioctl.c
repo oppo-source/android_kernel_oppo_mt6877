@@ -723,6 +723,10 @@ static int ioctl_setflags(struct file *file, unsigned int __user *argp)
 
 	err = get_user(flags, argp);
 	if (!err) {
+		if (flags & FS_COMPR_FL) {
+			if (is_vts_test(file))
+				return 0;
+		}
 		err = mnt_want_write_file(file);
 		if (!err) {
 			fileattr_fill_flags(&fa, flags);

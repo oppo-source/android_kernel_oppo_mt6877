@@ -113,6 +113,17 @@ enum mmc_err_stat {
 	MMC_ERR_MAX,
 };
 
+#ifdef CONFIG_MMC_PASSWORDS
+typedef struct mmc_sd_lock {
+#define MAX_UNLOCK_PASSWORD_WITH_BUF 20    	/* 1(len) + max_pwd(16) + 0xFF 0xFF + 0 = 20 */
+    bool swith_voltage;    /* whether sdcard voltage swith to 1.8v  */
+    bool auto_unlock;
+    u8 unlock_pwd[MAX_UNLOCK_PASSWORD_WITH_BUF];
+    int (*sysfs_add)(struct mmc_host *, struct mmc_card *card);
+    void (*sysfs_remove)(struct mmc_host *, struct mmc_card *card);
+}mmc_sd_lock;
+#endif
+
 struct mmc_host_ops {
 	/*
 	 * It is optional for the host to implement pre_req and post_req in

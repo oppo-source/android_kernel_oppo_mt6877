@@ -24,7 +24,7 @@
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(f2fs_write_checkpoint);
 
-#define DEFAULT_CHECKPOINT_IOPRIO (IOPRIO_PRIO_VALUE(IOPRIO_CLASS_BE, 3))
+#define DEFAULT_CHECKPOINT_IOPRIO (IOPRIO_PRIO_VALUE(IOPRIO_CLASS_RT, 3))
 
 static struct kmem_cache *ino_entry_slab;
 struct kmem_cache *f2fs_inode_entry_slab;
@@ -722,6 +722,25 @@ static int recover_orphan_inode(struct f2fs_sb_info *sbi, nid_t ino)
 		goto err_out;
 	}
 
+#ifdef CONFIG_F2FS_FS_DEDUP
+	if (is_inode_flag_set(inode, FI_REVOKE_DEDUP)) {
+		f2fs_notice(sbi, "recover orphan: ino[%u] set revoke, flags[%lu]",
+				ino, F2FS_I(inode)->flags[0]);
+		f2fs_bug_on(sbi, is_inode_flag_set(inode, FI_DOING_DEDUP));
+		err = f2fs_truncate_dedup_inode(inode, FI_REVOKE_DEDUP);
+		iput(inode);
+		return err;
+	}
+
+	if (is_inode_flag_set(inode, FI_DOING_DEDUP)) {
+		f2fs_notice(sbi, "recover orphan: ino[%u] set doing dedup, flags[%lu]",
+				ino, F2FS_I(inode)->flags[0]);
+		err = f2fs_truncate_dedup_inode(inode, FI_DOING_DEDUP);
+		iput(inode);
+		return err;
+	}
+#endif
+
 	clear_nlink(inode);
 
 	/* truncate all the data during iput */
@@ -1354,20 +1373,12 @@ static void update_ckpt_flags(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	struct f2fs_checkpoint *ckpt = F2FS_CKPT(sbi);
 	unsigned long flags;
 
-	if (cpc->reason & CP_UMOUNT) {
-		if (le32_to_cpu(ckpt->cp_pack_total_block_count) +
-			NM_I(sbi)->nat_bits_blocks > BLKS_PER_SEG(sbi)) {
-			clear_ckpt_flags(sbi, CP_NAT_BITS_FLAG);
-			f2fs_notice(sbi, "Disable nat_bits due to no space");
-		} else if (!is_set_ckpt_flags(sbi, CP_NAT_BITS_FLAG) &&
-						f2fs_nat_bitmap_enabled(sbi)) {
-			f2fs_enable_nat_bits(sbi);
-			set_ckpt_flags(sbi, CP_NAT_BITS_FLAG);
-			f2fs_notice(sbi, "Rebuild and enable nat_bits");
-		}
-	}
-
 	spin_lock_irqsave(&sbi->cp_lock, flags);
+
+	if ((cpc->reason & CP_UMOUNT) &&
+			le32_to_cpu(ckpt->cp_pack_total_block_count) >
+			sbi->blocks_per_seg - NM_I(sbi)->nat_bits_blocks)
+		disable_nat_bits(sbi, false);
 
 	if (cpc->reason & CP_TRIMMED)
 		__set_ckpt_flags(ckpt, CP_TRIMMED_FLAG);
@@ -1551,8 +1562,7 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	start_blk = __start_cp_next_addr(sbi);
 
 	/* write nat bits */
-	if ((cpc->reason & CP_UMOUNT) &&
-			is_set_ckpt_flags(sbi, CP_NAT_BITS_FLAG)) {
+	if (enabled_nat_bits(sbi, cpc)) {
 		__u64 cp_ver = cur_cp_version(ckpt);
 		block_t blk;
 

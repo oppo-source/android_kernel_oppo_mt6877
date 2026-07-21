@@ -55,6 +55,8 @@ void mmc_run_bkops(struct mmc_card *card);
 int mmc_cmdq_enable(struct mmc_card *card);
 int mmc_cmdq_disable(struct mmc_card *card);
 int mmc_sanitize(struct mmc_card *card, unsigned int timeout_ms);
-
+#ifdef CONFIG_MMC_PASSWORDS
+int mmc_lock_unlock_by_buf(struct mmc_card *card, u8* key_buf,int key_len, int mode);
+#endif
 #endif
 
