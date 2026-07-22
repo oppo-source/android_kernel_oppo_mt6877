@@ -442,6 +442,17 @@ static inline bool mmc_ready_for_data(u32 status)
 #define MMC_SWITCH_MODE_WRITE_BYTE	0x03	/* Set target to value */
 
 /*
+ * MMC_LOCK_UNLOCK modes
+ */
+#ifdef CONFIG_MMC_PASSWORDS
+#define MMC_LOCK_MODE_ERASE		(1<<3)
+#define MMC_LOCK_MODE_LOCK		(1<<2)
+#define MMC_LOCK_MODE_CLR_PWD	(1<<1)
+#define MMC_LOCK_MODE_SET_PWD	(1<<0)
+#define MMC_LOCK_MODE_UNLOCK    (1<<4)
+#endif /* CONFIG_MMC_PASSWORDS */
+
+/*
  * Erase/trim/discard
  */
 #define MMC_ERASE_ARG			0x00000000

@@ -121,6 +121,9 @@ struct bpf_prog *bpf_prog_alloc_no_stats(unsigned int size, gfp_t gfp_extra_flag
 #endif
 
 	INIT_LIST_HEAD_RCU(&fp->aux->ksym.lnode);
+#ifdef CONFIG_FINEIBT
+	INIT_LIST_HEAD_RCU(&fp->aux->ksym_prefix.lnode);
+#endif
 	mutex_init(&fp->aux->used_maps_mutex);
 	mutex_init(&fp->aux->dst_mutex);
 
@@ -529,6 +532,8 @@ struct bpf_prog *bpf_patch_insn_single(struct bpf_prog *prog, u32 off,
 
 int bpf_remove_insns(struct bpf_prog *prog, u32 off, u32 cnt)
 {
+	int err;
+
 	/* Branch offsets can't overflow when program is shrinking, no need
 	 * to call bpf_adj_branches(..., true) here
 	 */
@@ -536,7 +541,9 @@ int bpf_remove_insns(struct bpf_prog *prog, u32 off, u32 cnt)
 		sizeof(struct bpf_insn) * (prog->len - off - cnt));
 	prog->len -= cnt;
 
-	return WARN_ON_ONCE(bpf_adj_branches(prog, off, off + cnt, off, false));
+	err = bpf_adj_branches(prog, off, off + cnt, off, false);
+	WARN_ON_ONCE(err);
+	return err;
 }
 
 static void bpf_prog_kallsyms_del_subprogs(struct bpf_prog *fp)
@@ -687,6 +694,23 @@ void bpf_prog_kallsyms_add(struct bpf_prog *fp)
 	fp->aux->ksym.prog = true;
 
 	bpf_ksym_add(&fp->aux->ksym);
+
+#ifdef CONFIG_FINEIBT
+	/*
+	 * When FineIBT, code in the __cfi_foo() symbols can get executed
+	 * and hence unwinder needs help.
+	 */
+	if (cfi_mode != CFI_FINEIBT)
+		return;
+
+	snprintf(fp->aux->ksym_prefix.name, KSYM_NAME_LEN,
+		 "__cfi_%s", fp->aux->ksym.name);
+
+	fp->aux->ksym_prefix.start = (unsigned long) fp->bpf_func - 16;
+	fp->aux->ksym_prefix.end   = (unsigned long) fp->bpf_func;
+
+	bpf_ksym_add(&fp->aux->ksym_prefix);
+#endif
 }
 
 void bpf_prog_kallsyms_del(struct bpf_prog *fp)
@@ -695,6 +719,11 @@ void bpf_prog_kallsyms_del(struct bpf_prog *fp)
 		return;
 
 	bpf_ksym_del(&fp->aux->ksym);
+#ifdef CONFIG_FINEIBT
+	if (cfi_mode != CFI_FINEIBT)
+		return;
+	bpf_ksym_del(&fp->aux->ksym_prefix);
+#endif
 }
 
 static struct bpf_ksym *bpf_ksym_find(unsigned long addr)

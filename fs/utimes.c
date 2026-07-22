@@ -24,6 +24,11 @@ int vfs_utimes(const struct path *path, struct timespec64 *times)
 	struct inode *inode = path->dentry->d_inode;
 	struct inode *delegated_inode = NULL;
 
+        if (path == NULL || path->dentry == NULL) {
+            printk("NULL pointer found, path address:%p, comm:%s, pid:%d", path, current->comm,current->pid);
+            return -EINVAL;
+        }
+
 	if (times) {
 		if (!nsec_valid(times[0].tv_nsec) ||
 		    !nsec_valid(times[1].tv_nsec))
