@@ -1,0 +1,181 @@
+name: KittiSU CPH2251 build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/kittisu-manual-hook-cph2251
+    paths:
+      - 'drivers/kernelsu/**'
+      - 'drivers/Kconfig'
+      - 'drivers/Makefile'
+      - 'fs/exec.c'
+      - 'fs/stat.c'
+      - 'fs/open.c'
+      - 'kernel/reboot.c'
+      - 'arch/arm64/configs/k6877v1_64_k419_defconfig'
+      - '.github/workflows/kittisu-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kittisu-cph2251-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Image with clang-r383902
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        working-directory: kernel-4.19
+    env:
+      ARCH: arm64
+      CROSS_COMPILE: aarch64-linux-gnu-
+      DEFCONFIG: k6877v1_64_k419_defconfig
+      # Vendor Makefiles use this to select the k419 SCP include path.
+      TARGET_PRODUCT: k6877v1_64_k419
+
+    steps:
+      - name: Check out kernel source
+        uses: actions/checkout@v4
+        with:
+          path: kernel-4.19
+          fetch-depth: 1
+
+      - name: Check out matching OPPO vendor tree
+        uses: actions/checkout@v4
+        with:
+          repository: oppo-source/android_kernel_modules_oppo_mt6877
+          ref: 051951689da7a282b411a8b47293df1f9cc21ac1
+          path: vendor-src
+          fetch-depth: 1
+
+      - name: Prepare OPPO vendor tree
+        working-directory: .
+        run: |
+          set -euo pipefail
+          test -d vendor-src/vendor
+          mv vendor-src/vendor vendor
+          rm -rf vendor-src
+          test -f vendor/oplus/kernel/oplus_performance/sched_assist/Kconfig
+          test -f vendor/oplus/kernel/oplus_performance/klockopt/Kconfig
+          test -f kernel-4.19/kernel/sched_assist/Kconfig
+          test -f kernel-4.19/kernel/locking/klockopt/Kconfig
+
+      - name: Prepare legacy vendor mount
+        working-directory: .
+        run: |
+          set -euo pipefail
+          # drivers/base/kernelFwUpdate points at ../../../../vnd/vendor/...,
+          # one level above the workspace and through a legacy "vnd" mount.
+          # Provide that layout without modifying the kernel source tree.
+          mkdir -p ../vnd
+          ln -sfn "$GITHUB_WORKSPACE/vendor" ../vnd/vendor
+          test -f kernel-4.19/drivers/base/kernelFwUpdate/Kconfig
+
+      - name: Report unresolved vendor symlinks
+        working-directory: .
+        run: |
+          set -euo pipefail
+          unresolved=0
+          while IFS= read -r -d '' link; do
+            if [ ! -e "$link" ]; then
+              echo "::warning::Unresolved symlink ${link#kernel-4.19/} -> $(readlink "$link")"
+              unresolved=$((unresolved + 1))
+            fi
+          done < <(find kernel-4.19 -type l -print0)
+          echo "Unresolved vendor symlinks: $unresolved"
+
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc binutils-aarch64-linux-gnu bison build-essential cpio curl \
+            device-tree-compiler flex gcc-aarch64-linux-gnu libelf-dev \
+            libssl-dev lz4 xz-utils zip zstd
+
+      - name: Install clang-r383902
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/clang-r383902"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/clang.tar.gz" \
+            "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-11.0.0_r48/clang-r383902.tar.gz"
+          tar -xzf "$RUNNER_TEMP/clang.tar.gz" -C "$RUNNER_TEMP/clang-r383902"
+          echo "$RUNNER_TEMP/clang-r383902/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/clang-r383902/bin/clang" --version | head -n 1
+
+      - name: Verify toolchain
+        run: |
+          set -euo pipefail
+          clang --version | head -n 1
+          ld.lld --version | head -n 1
+          aarch64-linux-gnu-elfedit --version | head -n 1
+
+      - name: Verify integration markers
+        run: |
+          set -euo pipefail
+          grep -q 'ksu_handle_execveat' fs/exec.c
+          grep -q 'ksu_handle_post_execveat' fs/exec.c
+          grep -q 'ksu_handle_stat' fs/stat.c
+          grep -q 'ksu_handle_newfstat_ret' fs/stat.c
+          grep -q 'ksu_handle_faccessat' fs/open.c
+          grep -q 'ksu_handle_sys_reboot' kernel/reboot.c
+          grep -q '^CONFIG_KSU=y$' arch/arm64/configs/k6877v1_64_k419_defconfig
+          grep -q '^CONFIG_KSU_MANUAL_HOOK=y$' arch/arm64/configs/k6877v1_64_k419_defconfig
+          test -f drivers/kernelsu/Kbuild
+
+      - name: Configure kernel
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)" O=out ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" \
+            LLVM=1 LLVM_IAS=1 HOSTCFLAGS="-fcommon" "$DEFCONFIG"
+          grep -E '^(CONFIG_KSU|CONFIG_KSU_MANUAL_HOOK|CONFIG_KALLSYMS_ALL|CONFIG_KPROBES)=' out/.config
+          grep -q '^CONFIG_KSU=y$' out/.config
+          grep -q '^CONFIG_KSU_MANUAL_HOOK=y$' out/.config
+
+      - name: Build Image
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)" O=out ARCH="$ARCH" CROSS_COMPILE="$CROSS_COMPILE" \
+            LLVM=1 LLVM_IAS=1 HOSTCFLAGS="-fcommon" Image 2>&1 | tee build.log
+          test -f out/arch/arm64/boot/Image
+          test -f out/vmlinux
+          test -f out/drivers/kernelsu/built-in.a
+          test -f out/drivers/kernelsu/core/init.o
+          ls -l out/drivers/kernelsu/
+          grep -q -- '-- KittiSU version code: 35111' build.log
+          grep -q -- '-- KittiSU: using Manual Hook' build.log
+          grep -q '^CONFIG_KSU=y$' out/.config
+          echo 'KittiSU object and manual-hook checks passed.'
+
+      - name: Collect artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cp out/arch/arm64/boot/Image artifacts/Image
+          cp out/vmlinux artifacts/vmlinux
+          cp out/System.map artifacts/System.map
+          cp out/.config artifacts/config.used
+          cp build.log artifacts/build.log
+          llvm-nm out/vmlinux | grep ' ksu_' | sort > artifacts/ksu-symbols.txt || true
+          sha256sum artifacts/Image artifacts/vmlinux artifacts/System.map > artifacts/SHA256SUMS
+          wc -c artifacts/Image artifacts/vmlinux
+          head -n 50 artifacts/ksu-symbols.txt
+
+      - name: Upload kernel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kittisu-cph2251-${{ github.sha }}
+          path: kernel-4.19/artifacts/
+          if-no-files-found: error
+          retention-days: 14
